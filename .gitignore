@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+web/.env
+supabase/.env
+supabase/.branches
+supabase/.temp
+e2e/.stack/
+e2e/artifacts/
+*.log
+.DS_Store

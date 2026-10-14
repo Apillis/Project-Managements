@@ -1,0 +1,12 @@
+{
+  "name": "pm-db-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "reset": "bash ./reset-db.sh",
+    "test": "bash ./reset-db.sh && node --test --test-concurrency=1 tests/*.test.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

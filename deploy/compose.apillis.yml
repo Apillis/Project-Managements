@@ -1,0 +1,65 @@
+# Apillis PM services added on top of the official Supabase self-host compose.
+# Used from /opt/apillis-pm/supabase:
+#   docker compose -f docker-compose.yml -f ../pm-app/deploy/compose.apillis.yml up -d
+# Paths are relative to the supabase/ folder (the compose project directory).
+# Requires Docker Compose v2.24+ (for !reset).
+
+services:
+  # Single entry point on the LAN (HTTPS). Everything else stays inside Docker.
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PM_DOMAIN: ${PM_DOMAIN:-pm.apillis.lan}
+      STUDIO_DOMAIN: ${STUDIO_DOMAIN:-studio.apillis.lan}
+      ADMIN_IP: ${ADMIN_IP:-192.168.1.20}
+    volumes:
+      - ../pm-app/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - kong
+      - pm-web
+
+  # React single-page app (built inside Docker, no Node.js needed on the host)
+  pm-web:
+    build:
+      context: ../pm-app/web
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+        VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+        VITE_ENABLE_GOOGLE: ${ENABLE_GOOGLE_SIGNUP:-false}
+    image: apillis/pm-web:latest
+    restart: unless-stopped
+
+  # E-mail / Google Chat delivery from public.notification_outbox
+  notifier:
+    build:
+      context: ../pm-app/notifier
+    image: apillis/pm-notifier:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-postgres}
+      SMTP_HOST: ${PM_SMTP_HOST:-}
+      SMTP_PORT: ${PM_SMTP_PORT:-587}
+      SMTP_SECURE: ${PM_SMTP_SECURE:-false}
+      SMTP_USER: ${PM_SMTP_USER:-}
+      SMTP_PASS: ${PM_SMTP_PASS:-}
+      SMTP_FROM: ${PM_SMTP_FROM:-}
+      NOTIFIER_INTERVAL_SECONDS: "15"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Do not publish the API gateway and the pooler directly on the LAN
+  kong:
+    ports: !reset []
+  supavisor:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

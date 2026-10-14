@@ -1,0 +1,15 @@
+{
+  "name": "apillis-pm",
+  "private": true,
+  "description": "Apillis PMLC — project life-cycle management (Supabase + React)",
+  "scripts": {
+    "setup": "npm --prefix db-tests ci && npm --prefix web ci && npm --prefix notifier ci",
+    "test:db": "npm --prefix db-tests test",
+    "test:web": "npm --prefix web run typecheck && npm --prefix web test",
+    "test:notifier": "npm --prefix notifier test",
+    "test:deploy": "node --test deploy/test/*.test.mjs",
+    "test": "npm run test:db && npm run test:web && npm run test:notifier && npm run test:deploy",
+    "build": "npm --prefix web run build",
+    "dev": "npm --prefix web run dev"
+  }
+}

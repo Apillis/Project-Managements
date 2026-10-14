@@ -1,0 +1,13 @@
+{
+  "name": "pm-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stack": "bash ./stack.sh",
+    "test": "node smoke.mjs"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "playwright": "1.56.1"
+  }
+}

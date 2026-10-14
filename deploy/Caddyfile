@@ -1,0 +1,30 @@
+# Caddy: HTTPS + routing. One host name for UI and API → no CORS issues.
+# "tls internal" = Caddy's own CA (install its root certificate on the PCs once,
+# see docs). With a real domain, replace it by a DNS-01 Let's Encrypt config.
+
+{$PM_DOMAIN} {
+	tls internal
+	encode zstd gzip
+
+	@api path /rest/v1/* /auth/v1/* /storage/v1/* /realtime/v1/* /functions/v1/* /graphql/v1/*
+	reverse_proxy @api kong:8000
+
+	reverse_proxy pm-web:80
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# Supabase Studio: administrators only
+{$STUDIO_DOMAIN} {
+	tls internal
+	@admin remote_ip {$ADMIN_IP}
+	handle @admin {
+		reverse_proxy studio:3000
+	}
+	respond 403
+}
