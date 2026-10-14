@@ -233,3 +233,37 @@ export async function readSheet(data: ArrayBuffer): Promise<Record<string, unkno
   });
   return out;
 }
+
+function plainCell(v: unknown): unknown {
+  if (v && typeof v === 'object') {
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const o = v as Record<string, unknown>;
+    if ('result' in o) return plainCell(o.result);
+    if ('hyperlink' in o && typeof o.hyperlink === 'string' && /^https?:/i.test(o.hyperlink)) {
+      // "Link" / "Drawing" captions → the URL itself; a linked part number keeps its text
+      const text = String(plainCell(o.text) ?? '').trim();
+      return !text || /^https?:/i.test(text) || /^(link|links|drawing|view|open|pdf|here)$/i.test(text) ? o.hyperlink : text;
+    }
+    if ('richText' in o) return (o.richText as { text: string }[]).map((t) => t.text).join('');
+    if ('text' in o) return plainCell(o.text);
+    if ('error' in o) return null;
+  }
+  return typeof v === 'string' ? v.trim() : v;
+}
+
+/** Every worksheet as a raw grid (0-based rows/cols), for imports with unknown layout. */
+export async function readWorkbookRaw(data: ArrayBuffer, maxRows = 20000): Promise<{ name: string; rows: unknown[][] }[]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(data);
+  return wb.worksheets.map((ws) => {
+    const rows: unknown[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row, rn) => {
+      if (rn > maxRows) return;
+      const r: unknown[] = [];
+      row.eachCell({ includeEmpty: false }, (cell, col) => { r[col - 1] = plainCell(cell.value); });
+      rows[rn - 1] = r;
+    });
+    for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
+    return { name: ws.name, rows };
+  });
+}

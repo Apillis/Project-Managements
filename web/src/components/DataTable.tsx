@@ -22,6 +22,14 @@ export function useCell() {
       case 'datetime': return fmtDateTime(v, lang);
       case 'code': return v ? <span className="code">{String(v)}</span> : '';
       case 'tags': return Array.isArray(v) ? v.join(', ') : '';
+      case 'tree': {
+        const lvl = Math.max(1, Number(r.level ?? 1));
+        return <span className="bom-tree" style={{ paddingLeft: (lvl - 1) * 16 }}>
+          <span className="muted small">{r.has_children ? '▾' : '·'} L{lvl}</span> {v === null || v === undefined ? '' : String(v)}
+        </span>;
+      }
+      case 'link': return typeof v === 'string' && /^https?:\/\//i.test(v)
+        ? <a href={v} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>↗</a> : (v ?? '');
       default:
         if (typeof v === 'boolean') return v ? t('a.yes') : t('a.no');
         if (Array.isArray(v)) return v.join(', ');

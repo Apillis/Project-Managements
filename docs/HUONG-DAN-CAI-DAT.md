@@ -85,6 +85,13 @@ Sau đó bật **Cài đặt → Chung → notify_email_enabled**.
    - Tab **Hồ sơ tuân thủ** → tạo danh mục CE (EU) / UL-NFPA 79 (US).
 7. **Xuất Excel:** menu **Xuất Excel**, chọn phân hệ → báo cáo, lọc theo dự án/ngày/trạng thái. Mỗi danh sách cũng có nút **Xuất Excel** riêng.
 8. **Nhập dữ liệu cũ:** menu **Nhập dữ liệu cũ** → tải file mẫu → điền → tải lên → kiểm tra lỗi → Nhập.
+9. **BOM nhiều cấp từ file khách (v1.1):**
+   - Tạo BOM nháp → bấm **Nhập Structure BOM** → chọn file Excel của khách (vd. AZTAKD610). Hệ thống tự tìm sheet và dòng tiêu đề, cột Level tạo cây cấp 1/2/3…, mã hàng khớp theo mã Ecount → MPN → mã khách, chưa có thì tạo mới; đơn giá trong file đưa vào **Bảng giá**.
+   - Nếu khách đổi mẫu file: **Cài đặt → Ánh xạ cột khi nhập Excel**, thêm tên cột mới.
+   - Nhập **Số bộ sản xuất** → cột **SL cần** = SL/cụm cha × số cụm cha × số bộ. Mục **Phân tích BOM** có tab *Gộp theo mã* và *Nhu cầu ròng* (trừ tồn kho, làm tròn MOQ).
+   - **Danh mục hàng Ecount:** Nhập dữ liệu cũ → tab *Danh mục hàng Ecount* → tải file xuất từ Ecount; cập nhật theo Item Code, giá mua vào bảng giá.
+10. **Dự toán giá (v1.1):** trong BOM bấm **Lập dự toán giá** → hệ thống lấy giá tốt nhất từ bảng giá, thêm nhân công mẫu và phí (forwarder, CoC…) → xem bảng **A–L** (B vật tư, C nhân công, E markup, K giá bán, L gồm phần dư MOQ) → **Cập nhật giá** khi có giá mới → Gửi duyệt → Ban Giám đốc duyệt → **Tạo báo giá**.
+11. **Hỏi giá NCC – RFQ (v1.1):** trong BOM bấm **Tạo RFQ** (có thể chỉ các dòng chưa có giá), chọn NCC → **Gửi RFQ** (email tới người liên hệ nhận RFQ của NCC) → **Nhập báo giá** của từng NCC → bảng so sánh tô xanh giá / thời gian giao tốt nhất → **Chọn** (giá vào bảng giá) → **Tạo PO từ RFQ**.
 
 ## 3. Cấu hình trong Cài đặt (quản trị)
 
@@ -98,6 +105,10 @@ Sau đó bật **Cài đặt → Chung → notify_email_enabled**.
 | Tiền tệ & tỷ giá, Thuế | Thêm USD/EUR… và nhập tỷ giá |
 | Đơn giá giờ công | Dùng để tính chi phí nhân công của dự án |
 | Mẫu vòng đời (IDEF0), Mẫu hồ sơ tuân thủ | Chỉnh sửa mẫu dùng cho dự án mới |
+| Đơn vị tính | Danh mục ĐVT (EA, M, KG…) và hệ số quy đổi |
+| Dự toán giá | Quy tắc phí (forwarder theo kiện, CoC…) và mẫu công đoạn lắp ráp (điện / cơ / cáp) |
+| Ánh xạ cột khi nhập Excel | Tên cột chấp nhận cho file Structure BOM và Ecount |
+| Chung → `default_labor_rate`, `rfq_email_enabled` | Đơn giá giờ mặc định cho dự toán; bật/tắt gửi email RFQ |
 
 ### Google Chat
 

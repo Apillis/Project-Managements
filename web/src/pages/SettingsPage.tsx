@@ -12,7 +12,7 @@ import { ResourceTable } from '../components/Resource';
 import { FormGrid } from '../components/Form';
 import { Empty, PageHead, Spinner, Tabs, useAction } from '../components/ui';
 
-type STab = 'general' | 'users' | 'permissions' | 'approvals' | 'numbering' | 'currencies' | 'taxes' | 'labor' | 'templates' | 'compliance' | 'warehouses';
+type STab = 'general' | 'users' | 'permissions' | 'approvals' | 'numbering' | 'currencies' | 'taxes' | 'labor' | 'templates' | 'compliance' | 'warehouses' | 'uoms' | 'costing' | 'importMap';
 
 export function SettingsPage() {
   const { t } = useI18n();
@@ -31,6 +31,9 @@ export function SettingsPage() {
     { key: 'templates', label: t('set.templates') },
     { key: 'compliance', label: t('r.compliance_templates') },
     { key: 'warehouses', label: t('r.warehouses') },
+    { key: 'uoms', label: t('r.uoms') },
+    { key: 'costing', label: t('set.costing') },
+    { key: 'importMap', label: t('r.import_mappings') },
   ];
   return (
     <>
@@ -46,6 +49,9 @@ export function SettingsPage() {
       {tab === 'labor' && <ResourceTable def={RESOURCES.labor_rates} />}
       {tab === 'templates' && <TemplateEditor />}
       {tab === 'compliance' && <ResourceTable def={RESOURCES.compliance_templates} />}
+      {tab === 'uoms' && <div className="stack"><ResourceTable def={RESOURCES.uoms} /><ResourceTable def={RESOURCES.uom_conversions} /></div>}
+      {tab === 'costing' && <div className="stack"><p className="small muted">{t('set.costingHelp')}</p><ResourceTable def={RESOURCES.cost_rules} /><ResourceTable def={RESOURCES.labor_step_templates} /></div>}
+      {tab === 'importMap' && <><p className="small muted">{t('set.importMapHelp')}</p><ResourceTable def={RESOURCES.import_mappings} /></>}
       {tab === 'warehouses' && <div className="stack"><ResourceTable def={RESOURCES.warehouses} /><ResourceTable def={RESOURCES.locations} /></div>}
     </>
   );

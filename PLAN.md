@@ -136,7 +136,7 @@ Template download → upload → validation preview (required fields, look-ups b
 
 Accounting (invoices, payments, milestone billing, P&L), Logistics (shipments, carriers, freight cost), integrations (MISA, BOM price API, Fabrication PM), Power BI read-only role, mobile scanning PWA.
 
-## 10. Verification status (2026-10-14)
+## 10. Verification status (v1.0.0, 2026-10-14)
 
 | Suite | Result |
 |---|---|
@@ -148,3 +148,30 @@ Accounting (invoices, payments, milestone billing, P&L), Logistics (shipments, c
 | Production build (`vite build`) | pass |
 
 Not verified here (needs the real environment): Supabase Storage upload/download, Realtime push, Google OAuth, SMTP to a real mailbox, Docker image builds and the self-host compose stack.
+
+
+## 11. v1.1 — BOM improvements, Costing and RFQ (from the AZTAKD610 Structure-BOM review)
+
+| # | Improvement | Implementation |
+|---|---|---|
+| 1 | Multi-level BOM | `bom_lines.parent_line_id` (+ level, sort path, cycle guard); views `v_bom_tree` (indented, required qty = qty-per × parents × build qty), `v_bom_flat` (summed by item). UI: indented tree with L1/L2… markers, parent picker. |
+| 2 | Customer PN / rev, ERP code | `items.erp_code` (unique, Ecount item code), `item_customer_refs` (customer × PN × rev), BOM header/line customer PN + rev, top item. |
+| 3 | Part / procurement type | `items.part_type` (OEM, fabricated, cable assy, PCBA, sub-assembly, raw/sub material, consumable, FG, service, intangible), `procurement_type` / `make_or_buy` incl. customer-supplied and subcontract. Only purchasable leaves go to PR / RFQ. |
+| 4 | Costing module | Price book `item_prices` (`best_price`), fee rules (`cost_rules`: forwarder per package, CoC…), labour templates (`labor_step_templates` from "Assy Breakout Cost"). `cost_estimates` + lines/labour/fees with the quote-sheet build-up B…L (material, labour, Apillis cost, markup, subtotal, VAT, fees/logistics, selling price, + MOQ excess). RPCs `build_cost_estimate`, `refresh_cost_estimate_prices`, `push_estimate_to_quotation`; approval doc type `cost_estimate`. |
+| 5 | RFQ module | `rfqs`, `rfq_lines`, `rfq_vendors`, `rfq_quotes`; `create_rfq_from_bom` (all purchasable lines or only lines without a valid price), `send_rfq` (e-mail per vendor contact through the notifier), quote matrix `v_rfq_comparison` (price / lead-time rank), `award_rfq_quote` (→ price book), `create_pos_from_rfq` (one draft PO per awarded vendor, linked to approved PR lines). |
+| 6 | Net requirement | `v_bom_net_requirement`: required − requested − reserved − usable stock, rounded up to MOQ / order multiple; `create_pr_from_bom(…, p_use_stock, p_reserve)` with `bom_reservations` so stock is not counted twice; PR lines carry `moq_qty`. |
+| 7 | UoM master | `uoms` + `uom_conversions`; every `uom` column normalised (`app.norm_uom`: each→EA, meter→M…) and FK-checked. |
+| 8 | Drawing links | `drawing_url` / `drawing_document_id` on items, BOM and RFQ lines; links shown in tables, sent in RFQ e-mails. |
+| 9 | Build site | `boms.build_location` / `cost_estimates.build_location` (VN / US / other) — fee rules can apply per site. |
+| 10 | Excel import with mapping | `import_mappings` (header aliases per field, editable in Settings). Import page tabs **Structure BOM** (sheet + header row auto-detected, Level → tree, items matched by ERP code → MPN → customer PN, created when missing, unit costs → price book) and **Ecount item list** (upsert by item code, new units, purchase prices). |
+
+New Excel exports: multi-level BOM, flattened BOM, net requirement, cost estimates (A–L), estimate material lines, RFQ comparison, price book (37 reports in total).
+
+### Verification status (v1.1.0, 2026-10-14)
+
+| Suite | Result |
+|---|---|
+| `db-tests` (+ multi-level BOM, net requirement & reservations, UoM, import_bom_tree, price book, costing reproduces the AZTAKD610 quote sheet B…L, RFQ send/quote/award/PO, RLS on new tables) | 56 / 56 pass |
+| `web` (+ header detection & mapping, level → tree, Ecount normalisation, raw workbook reader, ref pickers search text columns only, v1.1 enums/i18n, client vs DB unit normalisation) | 66 / 66 pass |
+| `notifier`, `deploy` | 8 / 8, 2 / 2 pass |
+| `e2e` (+ Structure BOM import from a customer-format workbook, net requirement, BOM Excel export, cost estimate → approval → quotation, RFQ → send → quote → award → PO, Ecount import) | pass, no browser errors |

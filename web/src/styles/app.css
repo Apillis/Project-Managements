@@ -226,3 +226,14 @@ table.matrix td:first-child, table.matrix th:first-child { text-align: left; }
   .sidebar, .topbar, .no-print { display: none !important; }
   .shell { display: block; }
 }
+
+/* ---------- v1.1: BOM tree, cost summary ---------- */
+.bom-tree { white-space: nowrap; }
+table.calc { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.calc td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+table.calc td.k { width: 34px; font-weight: 700; color: var(--muted); }
+table.calc td.v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.calc tr.total td { font-weight: 700; background: #f6f8fb; }
+table.calc td.f { color: var(--muted); font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+td.best { background: #dcf3e5; }

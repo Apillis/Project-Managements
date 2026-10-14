@@ -53,7 +53,7 @@ export interface FieldDef {
 export interface ColumnDef {
   name: string;
   label: string;            // i18n key
-  type?: FieldType | 'status' | 'bool' | 'progress' | 'code';
+  type?: FieldType | 'status' | 'bool' | 'progress' | 'code' | 'tree' | 'link';
   enumKey?: string;
   width?: number;
   align?: 'left' | 'right' | 'center';

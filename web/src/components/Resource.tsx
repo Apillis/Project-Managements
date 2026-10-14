@@ -173,8 +173,9 @@ export function RecordDrawer({ def, row, onClose, onSaved, fields, table, title 
 }
 
 /** Editable lines of a document. Editing allowed only while the parent is draft/rejected. */
-export function LinesEditor({ lines, parent, editable, resource, onChanged }: {
+export function LinesEditor({ lines, parent, editable, resource, onChanged, title, actions, refreshKey }: {
   lines: LinesDef; parent: Row; editable: boolean; resource: string; onChanged?: () => void;
+  title?: string; actions?: ReactNode; refreshKey?: number;
 }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<Row[]>([]);
@@ -186,14 +187,15 @@ export function LinesEditor({ lines, parent, editable, resource, onChanged }: {
     setRows((data as Row[]) ?? []);
   }, [lines, parent.id]);
 
-  useEffect(() => { load().catch(() => setRows([])); }, [load, tick]);
+  useEffect(() => { load().catch(() => setRows([])); }, [load, tick, refreshKey]);
 
   const fields = lines.fields;
   return (
     <div className="card">
       <div className="card-head">
-        <h3>{t('a.lines')}</h3><span className="muted small">{rows.length}</span>
+        <h3>{title ?? t('a.lines')}</h3><span className="muted small">{rows.length}</span>
         <div className="spacer" />
+        {actions}
         {editable && <button className="btn primary sm" onClick={() => setEditing({ ...newRecord(fields), [lines.fk]: parent.id, __parent: parent })}>+ {t('a.addLine')}</button>}
       </div>
       <DataTable columns={lines.columns} rows={rows} totals={lines.totals}

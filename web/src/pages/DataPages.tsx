@@ -12,6 +12,14 @@ import { useExporter } from '../components/ExportButton';
 import { FilterBar } from '../components/FilterBar';
 import { RefSelect } from '../components/Form';
 import { PageHead, Tabs, useAction } from '../components/ui';
+import { useSearchParams } from 'react-router';
+import { MappedImport } from './MappedImport';
+import type { MappedImportKey } from '../lib/mappedImport';
+
+const MAPPED: { key: MappedImportKey; resource: string }[] = [
+  { key: 'structure_bom', resource: 'bom' },
+  { key: 'ecount_items', resource: 'items' },
+];
 
 export function ExportCenter() {
   const { t } = useI18n();
@@ -93,8 +101,13 @@ export function ImportPage() {
   const { t } = useI18n();
   const { can } = useAuth();
   const { busy, run } = useAction();
+  const [sp] = useSearchParams();
   const keys = (Object.keys(IMPORTS) as ImportKey[]).filter((k) => can(IMPORTS[k].resource, 'write'));
-  const [key, setKey] = useState<ImportKey>(keys[0] ?? 'partners');
+  const mapped = MAPPED.filter((m) => can(m.resource, 'write')).map((m) => m.key);
+  const initial = sp.get('key') as ImportKey | MappedImportKey | null;
+  const [tab, setTab] = useState<ImportKey | MappedImportKey>(initial && ([...keys, ...mapped] as string[]).includes(initial) ? initial : (keys[0] ?? 'partners'));
+  const isMapped = (mapped as string[]).includes(tab);
+  const key: ImportKey = isMapped ? (keys[0] ?? 'partners') : (tab as ImportKey);
   const [bom, setBom] = useState<string | null>(null);
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [done, setDone] = useState<number | null>(null);
@@ -138,13 +151,14 @@ export function ImportPage() {
     setResult(null);
   }, t('im.done'));
 
-  if (!keys.length) return <><PageHead title={t('nav.import')} /><div className="card"><div className="empty">{t('m.noPermission')}</div></div></>;
+  if (!keys.length && !mapped.length) return <><PageHead title={t('nav.import')} /><div className="card"><div className="empty">{t('m.noPermission')}</div></div></>;
 
   return (
     <>
       <PageHead title={t('nav.import')} sub={t('im.sub')} />
-      <Tabs tabs={keys.map((k) => ({ key: k, label: t(`im.${k}`) }))} value={key} onChange={setKey} />
-      <div className="card">
+      <Tabs<ImportKey | MappedImportKey> tabs={[...mapped, ...keys].map((k) => ({ key: k, label: t(`im.${k}`) }))} value={tab} onChange={setTab} />
+      {isMapped && <MappedImport importKey={tab as MappedImportKey} presetBom={sp.get('bom')} />}
+      {!isMapped && <div className="card">
         <div className="card-body stack">
           <ol className="small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
             <li>{t('im.step1')} <button className="btn sm" disabled={busy} onClick={template}>⬇ {t('im.template')}</button></li>
@@ -177,7 +191,7 @@ export function ImportPage() {
           )}
           {done !== null && <div className="badge green" style={{ alignSelf: 'flex-start' }}>{t('im.imported', { n: done })}</div>}
         </div>
-      </div>
+      </div>}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DICT, DICT_KEYS } from '../lib/dict';
 import { enumLabel, translate } from '../lib/i18n';
 import { collectKeys } from './i18nKeys';
+import { E } from '../lib/resources';
 
 describe('i18n dictionary', () => {
   it('has no duplicate keys', () => {
@@ -13,6 +14,13 @@ describe('i18n dictionary', () => {
     const used = [...collectKeys('src')];
     const missing = used.filter((k) => !DICT.vi[k] || !DICT.en[k]);
     expect(missing).toEqual([]);
+  });
+
+  it('translates every value of the v1.1 enums', () => {
+    const keys = ['partType', 'makeOrBuy', 'buildLocation', 'uomCategory', 'costBasis', 'laborDiscipline', 'priceSource'] as const;
+    const missing = keys.flatMap((k) => (E[k] as readonly string[]).map((v) => `e.${k}.${v}`)).filter((k) => !DICT.vi[k] || !DICT.en[k]);
+    const statuses = [...E.estimateStatus, ...E.rfqStatus].map((v) => `s.${v}`).filter((k) => !DICT.vi[k]);
+    expect([...missing, ...statuses]).toEqual([]);
   });
 
   it('has no empty translations', () => {

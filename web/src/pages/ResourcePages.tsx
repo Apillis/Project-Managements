@@ -8,9 +8,13 @@ import { newRecord, REF, RESOURCES, toPayload, validate } from '../lib/resources
 import { fmtDateTime } from '../lib/format';
 import type { ResourceDef, Row } from '../lib/types';
 import { ResourceTable, LinesEditor } from '../components/Resource';
+import { ExportButton } from '../components/ExportButton';
 import { FormGrid, RefSelect } from '../components/Form';
 import { ApprovalPanel } from '../components/Approval';
 import { Dialog, Empty, PageHead, Spinner, StatusBadge, useAction } from '../components/ui';
+import {
+  BomActions, BomAnalysis, BuildEstimateDialog, CreatePrDialog, CreateRfqDialog, EstimateActions, EstimatePanels, RfqActions, RfqPanels,
+} from './DocPanels';
 
 export function ResourceListPage() {
   const { key = '' } = useParams();
@@ -81,7 +85,7 @@ export function ResourceDetailPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [tick, setTick] = useState(0);
-  const [dialog, setDialog] = useState<null | 'revision' | 'po' | 'project'>(null);
+  const [dialog, setDialog] = useState<null | string>(null);
 
   const load = useCallback(async () => {
     if (!def) return;
@@ -89,13 +93,14 @@ export function ResourceDetailPage() {
       setRow(newRecord(def.fields, { projectId: sp.get('project') ?? undefined }));
       return;
     }
-    const r = await must(supabase.from(def.table).select('*').eq('id', id).single());
-    setRow(r as Row);
-    if (def.view) {
-      const v = await supabase.from(def.view).select('*').eq('id', id).maybeSingle();
-      setView((v.data as Row) ?? null);
-    }
+    const [r, v] = await Promise.all([
+      must(supabase.from(def.table).select('*').eq('id', id).single()),
+      def.view ? supabase.from(def.view).select('*').eq('id', id).maybeSingle() : Promise.resolve(null),
+    ]);
+    // set everything in one go so an edit started right after the reload is not marked clean
+    setView((v?.data as Row) ?? null);
     setDirty(false);
+    setRow(r as Row);
   }, [def, id, isNew, sp]);
 
   useEffect(() => { load().catch(() => setRow(null)); }, [load, tick]);
@@ -151,6 +156,9 @@ export function ResourceDetailPage() {
           </button>
         ))}
         {!isNew && <DocActions def={def} row={row} view={view} onDialog={setDialog} />}
+        {!isNew && def.key === 'boms' && <BomActions row={row} onDialog={setDialog} />}
+        {!isNew && def.key === 'cost_estimates' && <EstimateActions row={row} onChanged={() => setTick(tick + 1)} />}
+        {!isNew && def.key === 'rfqs' && <RfqActions row={row} onChanged={() => setTick(tick + 1)} />}
       </PageHead>
 
       <div className="stack">
@@ -158,7 +166,11 @@ export function ResourceDetailPage() {
           <FormGrid fields={formFields} row={row} setRow={(r) => { setRow(r); setDirty(true); }} errors={errors} disabled={!editable && !partly} isNew={isNew} />
           {!editable && !isNew && canWrite && def.docType && <p className="small muted" style={{ marginTop: 12 }}>{t('m.lockedDoc')}</p>}
         </div></div>
-        {!isNew && row.id === id && def.lines && <LinesEditor lines={def.lines} parent={row} editable={editable} resource={def.resource} onChanged={() => setTick(tick + 1)} />}
+        {!isNew && row.id === id && def.key === 'cost_estimates' && <EstimatePanels est={row} view={view} editable={editable} onChanged={() => setTick(tick + 1)} refreshKey={tick} />}
+        {!isNew && row.id === id && def.lines && <LinesEditor lines={def.lines} parent={row} editable={editable} resource={def.resource} onChanged={() => setTick(tick + 1)} refreshKey={tick}
+          actions={def.key === 'boms' ? <ExportButton exportKey="bom_tree" filters={{ eq: { bom_id: id } }} /> : undefined} />}
+        {!isNew && row.id === id && def.key === 'boms' && <BomAnalysis bom={row} refreshKey={tick} />}
+        {!isNew && row.id === id && def.key === 'rfqs' && <RfqPanels rfq={row} onChanged={() => setTick(tick + 1)} refreshKey={tick} />}
         {isNew && def.lines && <div className="card"><div className="card-body muted">{t('m.saveFirst')}</div></div>}
         {!isNew && def.docType && <ApprovalPanel docType={def.docType} docId={id} status={status} resource={def.resource} onChanged={() => setTick(tick + 1)} />}
         {!isNew && <AuditTrail table={def.table} id={id} />}
@@ -167,11 +179,14 @@ export function ResourceDetailPage() {
       {dialog === 'revision' && <NewRevisionDialog bom={row} onClose={() => setDialog(null)} />}
       {dialog === 'po' && <CreatePoDialog pr={row} onClose={() => setDialog(null)} />}
       {dialog === 'project' && <CreateProjectDialog so={row} onClose={() => setDialog(null)} />}
+      {dialog === 'pr' && <CreatePrDialog bom={row} onClose={() => setDialog(null)} />}
+      {dialog === 'rfq' && <CreateRfqDialog bom={row} onClose={() => setDialog(null)} />}
+      {dialog === 'estimate' && <BuildEstimateDialog bom={{ ...view, ...row }} onClose={() => setDialog(null)} />}
     </>
   );
 }
 
-function DocActions({ def, row, view, onDialog }: { def: ResourceDef; row: Row; view: Row | null; onDialog: (d: 'revision' | 'po' | 'project') => void }) {
+function DocActions({ def, row, view, onDialog }: { def: ResourceDef; row: Row; view: Row | null; onDialog: (d: string) => void }) {
   const { t } = useI18n();
   const { can } = useAuth();
   const nav = useNavigate();
@@ -180,10 +195,6 @@ function DocActions({ def, row, view, onDialog }: { def: ResourceDef; row: Row; 
   const out: React.ReactNode[] = [];
   if (def.key === 'boms' && s === 'approved') {
     if (can('bom', 'write')) out.push(<button key="rev" className="btn" onClick={() => onDialog('revision')}>↻ {t('act.newRevision')}</button>);
-    if (can('pr', 'write')) out.push(<button key="pr" className="btn" disabled={busy} onClick={() => run(async () => {
-      const prId = await must(supabase.rpc('create_pr_from_bom', { p_bom_id: row.id, p_needed_by: null }));
-      nav(`/r/purchase_requests/${prId}`);
-    })}>✎ {t('act.createPr')}</button>);
   }
   if (def.key === 'purchase_requests' && ['approved', 'partially_ordered'].includes(s) && can('po', 'write')) {
     out.push(<button key="po" className="btn" onClick={() => onDialog('po')}>🛒 {t('act.createPo')}</button>);

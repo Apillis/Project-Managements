@@ -80,3 +80,23 @@ describe('import template round trip', () => {
     ]);
   });
 });
+
+describe('readWorkbookRaw (imports with unknown layout)', () => {
+  it('returns every sheet as a grid with plain values, URLs from link captions', async () => {
+    const { readWorkbookRaw } = await import('../lib/excel');
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet('Cover').addRow(['Quote']);
+    const ws = wb.addWorksheet('Structure BOM');
+    ws.addRow(['AZTAKD610']);
+    ws.addRow([]);
+    ws.addRow(['Level', 'Description', 'BOM.Qty', 'Links', 'Customer PN']);
+    ws.addRow([1, { richText: [{ text: 'CONN ' }, { text: 'QC' }] }, { formula: '8*2', result: 16 },
+      { text: 'Link', hyperlink: 'https://drive.example/d/1' }, { text: 'C-100', hyperlink: 'https://plm.example/C-100' }]);
+    const buf = await wb.xlsx.writeBuffer();
+    const sheets = await readWorkbookRaw(buf as ArrayBuffer);
+    expect(sheets.map((s) => s.name)).toEqual(['Cover', 'Structure BOM']);
+    expect(sheets[1].rows[1]).toEqual([]);
+    expect(sheets[1].rows[3]).toEqual([1, 'CONN QC', 16, 'https://drive.example/d/1', 'C-100']);
+  });
+});

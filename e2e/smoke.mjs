@@ -1,6 +1,8 @@
 // End-to-end smoke test of the real app against GoTrue + PostgREST + PostgreSQL
 // (start the stack first: bash stack.sh up). Walks the main life-cycle:
-// sign-up → IDEF0 plan → BOM → approval → PR → PO → receiving → stock → Excel export.
+// sign-up → IDEF0 plan → BOM → approval → PR → PO → receiving → stock → Excel export,
+// v1.1: Structure-BOM import (multi-level) → net requirement → cost estimate (A–L)
+// → quotation → RFQ (send, quote, award, POs) → Ecount item import.
 import { chromium } from 'playwright';
 import ExcelJS from 'exceljs';
 import { mkdirSync } from 'node:fs';
@@ -106,7 +108,7 @@ try {
     await page.getByRole('button', { name: '+ Thêm dòng' }).click();
     const drawer = page.locator('.drawer');
     await pickRef('Vật tư', sku, sku, drawer);
-    await drawer.locator('label.field', { hasText: 'Số lượng' }).locator('input').fill(qty);
+    await drawer.locator('label.field', { hasText: 'SL / cụm cha' }).locator('input').fill(qty);
     await drawer.getByRole('button', { name: 'Lưu' }).click();
     await drawer.waitFor({ state: 'detached' });
   }
@@ -121,6 +123,8 @@ try {
 
   // ------------------------------------------------------------ PR from BOM
   await page.getByRole('button', { name: /Tạo PR từ BOM/ }).click();
+  await page.locator('.dialog').getByText('Trừ tồn kho hiện có').waitFor();
+  await page.locator('.dialog').getByRole('button', { name: 'Tạo' }).click();
   await page.waitForURL(/\/r\/purchase_requests\/[0-9a-f-]{36}$/);
   await page.locator('table.data tbody tr').nth(1).waitFor();
   await page.getByRole('button', { name: 'Gửi duyệt' }).click();
@@ -185,6 +189,132 @@ try {
   await page.locator('table.data tbody tr', { hasText: 'BK-EL1008' }).first().waitFor();
   await shot('materials');
   log('schedule (Gantt) and BOM-vs-actual tabs render');
+
+  // ------------------------------------------------------------ v1.1 Structure BOM import (multi-level)
+  const bomFile = `${OUT}AZTAKD610-structure.xlsx`;
+  {
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet('Quote').addRow(['Quotation sheet']);
+    const ws = wb.addWorksheet('Structure BOM');
+    ws.addRow(['AZTAKD610-REPEAT BoM']);
+    ws.addRow(['Printed', '2026-10-01']);
+    ws.addRow(['Level', 'Customer Part Number', 'Ecount Item Code', 'Description', 'Customer Rev', 'BOM.Qty', 'Unit', 'Part Type',
+      'Procument Type', 'Manufacturer', 'Manufacturer Part Number', 'BOM.Find Num', 'Part Unit Cost', 'MOQ Qty', 'Lead Time', 'Supplier Name', 'Links']);
+    ws.addRow([0, 'AZ-610', 'E2E-610', 'ASSY, CABLE, USER INTERFACE', 'B', 1, 'EA', 'Cable Assy', 'Make']);
+    ws.addRow([1, 'AZ-C1', 'E2E-C1', 'CONN QC RCPT 22-18AWG', 'A', 16, 'each', 'OEM', 'Buy', 'TE', '8-60894-1', '1', 0.08, 100, '4 weeks', 'Beckhoff', { text: 'Link', hyperlink: 'https://example.com/c1.pdf' }]);
+    ws.addRow([1, 'AZ-W1', 'E2E-W1', 'CABLE 2COND 20AWG', '', 28, 'meter', 'OEM', 'Buy', 'Alpha', '2422C', '3', 9.85, 0, '14', '', '']);
+    ws.addRow([1, 'AZ-S1', 'E2E-S1', 'SUB ASSY BRACKET', 'A', 2, 'EA', 'Sub-Assembly', 'Make', '', '', '4']);
+    ws.addRow([2, 'AZ-S1-1', 'E2E-S11', 'SCREW M3x8', '', 4, 'EA', 'OEM', 'Buy', 'Wurth', 'M3X8', '4.1', 0.02]);
+    await wb.xlsx.writeFile(bomFile);
+  }
+  await page.goto(`${BASE}/r/boms/new?project=${projectId}`);
+  await page.locator('label.field', { hasText: 'Tên' }).first().locator('input').fill('AZTAKD610 cable');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.waitForURL(/\/r\/boms\/[0-9a-f-]{36}$/);
+  const bom2Url = page.url();
+  await page.getByRole('button', { name: /Nhập Structure BOM/ }).click();
+  await page.waitForURL(/\/import\?key=structure_bom/);
+  await page.locator('[data-testid=file-structure_bom]').setInputFiles(bomFile);
+  await page.getByText('2 cấp').waitFor({ timeout: 15000 });
+  await page.getByText(/Cụm tổng: AZ-610/).waitFor();
+  await shot('import-structure-bom');
+  await page.getByRole('button', { name: /Nhập 4 dòng/ }).click();
+  await page.waitForURL(bom2Url);
+  await page.locator('table.data tbody tr', { hasText: 'SCREW M3x8' }).locator('.bom-tree', { hasText: 'L2' }).waitFor({ timeout: 15000 });
+  await page.locator('label.field', { hasText: 'Mã hàng của khách' }).first().locator('input').inputValue().then((v) => assert.equal(v, 'AZ-610'));
+  await page.locator('label.field', { hasText: 'Số bộ sản xuất' }).locator('input').fill('10');
+  await page.getByRole('button', { name: 'Lưu', exact: true }).click();
+  await toast(/Đã lưu/);
+  await page.locator('table.data tbody tr', { hasText: 'CONN QC RCPT' }).filter({ hasText: '160' }).first().waitFor();
+  await shot('bom-multilevel');
+  log('Structure BOM imported from a customer-format Excel: sheet + header row detected, 3 levels, items/prices created, required qty × build qty');
+
+  await page.getByRole('tab', { name: 'Nhu cầu ròng' }).click();
+  await page.locator('.card', { hasText: 'Phân tích BOM' }).locator('table.data tbody tr', { hasText: 'CONN QC RCPT' }).waitFor();
+  const [dlTree] = await Promise.all([page.waitForEvent('download'),
+    page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Chi tiết dòng' }) }).getByRole('button', { name: /Xuất Excel/ }).click()]);
+  const treeFile = `${OUT}${dlTree.suggestedFilename()}`;
+  await dlTree.saveAs(treeFile);
+  {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(treeFile);
+    const ws = wb.worksheets[0];
+    const vals = [];
+    ws.eachRow((r) => vals.push(r.values.slice(1).map((v) => (v && typeof v === 'object' && 'result' in v ? v.result : v))));
+    const head = vals.findIndex((r) => r.includes('Cấp'));
+    assert.ok(head > 0, 'header row with level');
+    const lvl = vals[head].indexOf('Cấp');
+    assert.deepEqual(vals.slice(head + 1).filter((r) => typeof r[lvl] === 'number').map((r) => r[lvl]), [1, 1, 1, 2]);
+  }
+  await shot('bom-net-requirement');
+  log('net requirement tab and multi-level BOM Excel export (levels 1,1,1,2) verified');
+
+  // ------------------------------------------------------------ v1.1 cost estimate → quotation
+  await page.getByRole('button', { name: /Lập dự toán giá/ }).click();
+  await page.locator('.dialog').getByRole('button', { name: 'Tạo' }).click();
+  await page.waitForURL(/\/r\/cost_estimates\/[0-9a-f-]{36}$/);
+  await page.locator('table.calc tr', { hasText: 'Giá bán' }).first().waitFor({ timeout: 15000 });
+  await page.locator('.card', { hasText: 'Nhân công lắp ráp' }).locator('table.data tbody tr').first().waitFor();
+  await shot('cost-estimate');
+  await page.getByRole('button', { name: 'Gửi duyệt' }).click();
+  await toast(/Đã gửi duyệt/);
+  await page.getByRole('button', { name: '✔ Duyệt' }).click();
+  await page.locator('.dialog').getByRole('button', { name: 'Duyệt' }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đã duyệt' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /Tạo báo giá/ }).click();
+  await page.waitForURL(/\/r\/quotations\/[0-9a-f-]{36}$/);
+  await page.locator('table.data tbody tr').first().waitFor();
+  log('cost estimate built from the BOM (price book + labour templates + fee rules), approved and pushed to a quotation');
+
+  // ------------------------------------------------------------ v1.1 RFQ → award → PO
+  await page.goto(bom2Url);
+  await page.getByRole('button', { name: /Tạo RFQ/ }).click();
+  await pickRef('Nhà cung cấp được hỏi', 'BECK', 'Beckhoff', page.locator('.dialog'));
+  await page.locator('.dialog .badge', { hasText: 'Beckhoff' }).waitFor();
+  await page.locator('.dialog').getByRole('button', { name: 'Tạo' }).click();
+  await page.waitForURL(/\/r\/rfqs\/[0-9a-f-]{36}$/);
+  await page.locator('.card', { hasText: 'Nhà cung cấp được hỏi' }).locator('table.data tbody tr', { hasText: 'Beckhoff' }).waitFor();
+  await page.getByRole('button', { name: /Gửi RFQ/ }).click();
+  await toast(/Đã gửi RFQ/);
+  await page.locator('.page-head .badge', { hasText: 'Đã gửi' }).waitFor();
+  await page.getByRole('button', { name: '+ Nhập báo giá' }).click();
+  {
+    const drawer = page.locator('.drawer');
+    await pickRef('Dòng RFQ', 'CONN', 'CONN QC', drawer);
+    await pickRef('Nhà cung cấp', 'Beck', 'Beckhoff', drawer);
+    await drawer.locator('label.field', { hasText: 'Đơn giá' }).locator('input').fill('0.07');
+    await drawer.locator('label.field', { hasText: 'MOQ' }).locator('input').fill('200');
+    await drawer.getByRole('button', { name: 'Lưu' }).click();
+    await drawer.waitFor({ state: 'detached' });
+  }
+  await page.getByRole('button', { name: /✓ Chọn/ }).first().click();
+  await toast(/Đã chọn NCC/);
+  await shot('rfq-comparison');
+  await page.getByRole('button', { name: /Tạo PO từ RFQ/ }).click();
+  await page.waitForURL(/\/r\/purchase_orders\/[0-9a-f-]{36}$/);
+  await page.locator('table.data tbody tr').first().waitFor();
+  log('RFQ created from the BOM, sent, vendor quote entered and awarded (→ price book), draft PO created');
+
+  // ------------------------------------------------------------ v1.1 Ecount item import
+  const ecFile = `${OUT}ecount-items.xlsx`;
+  {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Item');
+    ws.addRow(['Item List']);
+    ws.addRow(['Item Code', 'Item Code (External)', 'Item Name', 'Spec.', 'Unit', 'Customer/Vendor Name', 'Purchase Price', 'Item Category', 'Active']);
+    ws.addRow(['E2E-C1', '8-60894-1', 'CONN QC RCPT (Ecount)', '22-18AWG', 'EA', 'Beckhoff', 0.075, 'Connector', 'Yes']);
+    ws.addRow(['E2E-NEW1', 'XYZ-1', 'HEAT SHRINK 6MM', '', 'DRUM', '', 12.5, 'Consumable', 'Yes']);
+    await wb.xlsx.writeFile(ecFile);
+  }
+  await page.goto(`${BASE}/import?key=ecount_items`);
+  await page.locator('[data-testid=file-ecount_items]').setInputFiles(ecFile);
+  await page.getByText(/Đơn vị mới sẽ được tạo: DRUM/).waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: /Nhập 2 dòng/ }).click();
+  await page.getByText(/Cập nhật 1, tạo mới 1 mã hàng, 2 giá/).waitFor({ timeout: 15000 });
+  await shot('import-ecount');
+  await page.goto(`${BASE}/r/item_prices`);
+  await page.locator('table.data tbody tr', { hasText: 'E2E-NEW1' }).first().waitFor();
+  log('Ecount item list imported by item code (1 updated, 1 created, new unit DRUM), prices in the price book');
 
   // ------------------------------------------------------------ Excel export
   await page.goto(`${BASE}/exports`);

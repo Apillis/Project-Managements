@@ -18,9 +18,11 @@ function useNavGroups(pending: number): NavGroup[] {
       { to: '/timesheets', label: 'nav.timesheets', icon: '⏱', resource: 'timesheets' },
     ] },
     { label: 'nav.sales', items: [
+      { to: '/r/cost_estimates', label: 'r.cost_estimates', icon: '∑', resource: 'costing' },
       { to: '/r/quotations', label: 'r.quotations', icon: '₫', resource: 'quotations' },
       { to: '/r/sales_orders', label: 'r.sales_orders', icon: '🗎', resource: 'sales_orders' },
       { to: '/r/partners', label: 'r.partners', icon: '👥', resource: 'partners' },
+      { to: '/r/partner_contacts', label: 'r.partner_contacts', icon: '☏', resource: 'partners' },
     ] },
     { label: 'nav.projects', items: [
       { to: '/projects', label: 'r.projects', icon: '▦', resource: 'projects' },
@@ -30,10 +32,13 @@ function useNavGroups(pending: number): NavGroup[] {
       { to: '/r/ecos', label: 'r.ecos', icon: '↻', resource: 'eco' },
       { to: '/r/documents', label: 'r.documents', icon: '🗀', resource: 'documents' },
       { to: '/r/items', label: 'r.items', icon: '⚙', resource: 'items' },
+      { to: '/r/item_customer_refs', label: 'r.item_customer_refs', icon: '⇆', resource: 'items' },
     ] },
     { label: 'nav.procurement', items: [
+      { to: '/r/rfqs', label: 'r.rfqs', icon: '?', resource: 'rfq' },
       { to: '/r/purchase_requests', label: 'r.purchase_requests', icon: '✎', resource: 'pr' },
       { to: '/r/purchase_orders', label: 'r.purchase_orders', icon: '🛒', resource: 'po' },
+      { to: '/r/item_prices', label: 'r.item_prices', icon: '$', resource: 'costing' },
     ] },
     { label: 'nav.warehouse', items: [
       { to: '/warehouse/receiving', label: 'nav.receiving', icon: '⇩', resource: 'po_receiving' },
