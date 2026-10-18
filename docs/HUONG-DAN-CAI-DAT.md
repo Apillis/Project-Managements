@@ -92,6 +92,19 @@ Sau đó bật **Cài đặt → Chung → notify_email_enabled**.
    - **Danh mục hàng Ecount:** Nhập dữ liệu cũ → tab *Danh mục hàng Ecount* → tải file xuất từ Ecount; cập nhật theo Item Code, giá mua vào bảng giá.
 10. **Dự toán giá (v1.1):** trong BOM bấm **Lập dự toán giá** → hệ thống lấy giá tốt nhất từ bảng giá, thêm nhân công mẫu và phí (forwarder, CoC…) → xem bảng **A–L** (B vật tư, C nhân công, E markup, K giá bán, L gồm phần dư MOQ) → **Cập nhật giá** khi có giá mới → Gửi duyệt → Ban Giám đốc duyệt → **Tạo báo giá**.
 11. **Hỏi giá NCC – RFQ (v1.1):** trong BOM bấm **Tạo RFQ** (có thể chỉ các dòng chưa có giá), chọn NCC → **Gửi RFQ** (email tới người liên hệ nhận RFQ của NCC) → **Nhập báo giá** của từng NCC → bảng so sánh tô xanh giá / thời gian giao tốt nhất → **Chọn** (giá vào bảng giá) → **Tạo PO từ RFQ**.
+12. **Phiếu yêu cầu vật tư – xuất kho theo phiếu (v1.2):**
+    - Kỹ thuật / Sản xuất / PMO: menu **Kho → Phiếu yêu cầu vật tư** (hoặc tab **Vật tư** của dự án) → tạo phiếu, chọn công việc IDEF0, ngày cần, nơi giao → thêm dòng (có thể chọn dòng BOM đã duyệt) → **Gửi duyệt** → PM duyệt. Kho nhận thông báo.
+    - Kho: **Kho → Xuất kho theo phiếu** → chọn vị trí, lấy từ *tồn của dự án* hoặc *kho chung* → **Xuất**. Không xuất vượt số lượng yêu cầu; phiếu tự chuyển "Đã xuất một phần / đã xuất".
+    - Muốn bắt buộc mọi lần xuất kho phải có phiếu: bật `issue_requires_request` trong Cài đặt → Chung.
+13. **Vận chuyển (v1.2):** menu **Vận chuyển → Chuyến hàng** (hoặc tab **Vận chuyển** của dự án) → nhập chiều (nhập / xuất / nội bộ), nơi đi – nơi đến, đơn vị vận tải, xe, tài xế, ngày đi / giao dự kiến, cước + chi phí khác → chuyển trạng thái *Đã đặt xe → Đang vận chuyển → Đã giao*. Cước được cộng vào chi phí dự án; báo cáo **Chi phí vận tải theo tuyến / dự án** ở Xuất Excel.
+14. **Tài chính dự án (v1.2):**
+    - Kế toán: **Tài chính → Mốc thanh toán** — lập lịch thanh toán theo hợp đồng, ví dụ *30% tạm ứng*, *60% sau FAT* (chọn công việc IDEF0 "FAT với khách hàng"), *10% sau SAT*. Tổng % của một SO không vượt 100%.
+    - Khi công việc gắn với mốc hoàn thành, mốc chuyển **Sẵn sàng xuất hoá đơn** và Kế toán được báo. Bấm **Lập hoá đơn** → kiểm tra dòng → **Phát hành** (dòng bị khoá; điền *Số HĐĐT (MISA)*) → **Ghi nhận thu tiền** khi khách trả (thu một phần được, không thu vượt).
+    - **Thu / chi tiền:** khoản chi cho NCC chọn theo PO (không vượt tổng PO), khoản chi cước chọn đơn vị vận tải + dự án.
+    - **Tài chính → Tài chính dự án**: tab *Lãi / lỗ* (doanh thu SO, đã xuất HĐ, đã thu, công nợ, chi phí PO + giờ công + vận chuyển, biên lợi nhuận, dòng tiền ròng), *Dòng tiền* theo tháng (thực tế + dự kiến), *Công nợ phải thu* với tuổi nợ.
+15. **Đóng dự án (v1.2):** tab **Tổng quan** của dự án → **Đóng dự án**. Hệ thống hiện checklist (công việc chưa xong, chứng từ chờ duyệt, PR/PO/phiếu vật tư còn mở, NCR, hồ sơ tuân thủ, chuyến hàng chưa giao, mốc chưa xuất HĐ, hoá đơn chưa thu đủ, giờ công chưa duyệt, tồn kho còn giữ cho dự án). Chỉ đóng được khi tất cả bằng 0. Sau khi đóng, **mọi chứng từ của dự án bị khoá** (trừ phiếu bảo hành); chỉ **Ban Giám đốc** mới mở lại được.
+16. **Bản tin nhắc việc hằng ngày (v1.2):** khi dịch vụ notifier chạy, mỗi ngày sau `digest_hour` (mặc định 7 giờ) hệ thống gửi thông báo: việc quá hạn (cho người thực hiện), chứng từ chờ duyệt quá `approval_reminder_days` ngày, NCR quá hạn, PO trễ, hoá đơn quá hạn, mốc chờ xuất HĐ, phiếu vật tư cần xuất, vật tư dưới tồn tối thiểu, chuyến hàng trễ. Quản trị có nút **Gửi bản tin ngay** ở Cài đặt → Chung.
+17. **Quên mật khẩu (v1.2):** ở màn hình đăng nhập bấm **Quên mật khẩu?** → nhập email → mở link trong email → đặt mật khẩu mới ở trang Hồ sơ.
 
 ## 3. Cấu hình trong Cài đặt (quản trị)
 
@@ -109,6 +122,11 @@ Sau đó bật **Cài đặt → Chung → notify_email_enabled**.
 | Dự toán giá | Quy tắc phí (forwarder theo kiện, CoC…) và mẫu công đoạn lắp ráp (điện / cơ / cáp) |
 | Ánh xạ cột khi nhập Excel | Tên cột chấp nhận cho file Structure BOM và Ecount |
 | Chung → `default_labor_rate`, `rfq_email_enabled` | Đơn giá giờ mặc định cho dự toán; bật/tắt gửi email RFQ |
+| Chung → `issue_requires_request` | Bắt buộc xuất kho theo phiếu yêu cầu vật tư đã duyệt (mặc định tắt) |
+| Chung → `default_payment_days` | Hạn thanh toán mặc định của hoá đơn (ngày, mặc định 30) |
+| Chung → `project_close_strict` | Chỉ cho đóng dự án khi checklist bằng 0 (mặc định bật) |
+| Chung → `digest_enabled`, `digest_hour`, `timezone`, `approval_reminder_days` | Bản tin nhắc việc hằng ngày |
+| Ma trận phân quyền (v1.2) | Phân hệ mới: *Phiếu yêu cầu vật tư*, *Vận chuyển & cước phí*, *Mốc thanh toán & hoá đơn*, *Thu / chi tiền* (mặc định: Kế toán ghi hoá đơn & thu chi; PMO xem) |
 
 ### Google Chat
 
@@ -130,9 +148,9 @@ Trong phòng chat Google, chọn **Ứng dụng & tích hợp → Webhook → Th
 Theo bản vẽ APL-IT-PM-001: Ubuntu Server 24.04, IP tĩnh, ổ RAID 1, có UPS.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Apillis/Project-Managements/main/deploy/scripts/install-server.sh | bash -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/Apillis/Project-Managements/main/deploy/scripts/install-server.sh | bash -s -- v1.2.0
 nano /opt/apillis-pm/supabase/.env      # SITE_URL, API_EXTERNAL_URL, SUPABASE_PUBLIC_URL = https://pm.apillis.lan, SMTP, ADMIN_IP
-/opt/apillis-pm/pm-app/deploy/scripts/deploy.sh v1.0.0
+/opt/apillis-pm/pm-app/deploy/scripts/deploy.sh v1.2.0
 ```
 
 | Hạng mục | Cách xử lý |
@@ -155,3 +173,7 @@ nano /opt/apillis-pm/supabase/.env      # SITE_URL, API_EXTERNAL_URL, SUPABASE_P
 | "Lines are locked…" | Chứng từ đã gửi duyệt. Bấm **Rút lại**, hoặc dùng ECO / phiên bản mới |
 | "You cannot approve a document you submitted" | Nguyên tắc tách nhiệm vụ: người khác cùng vai trò phải duyệt |
 | Không thấy giá trên PO | Đúng thiết kế với vai trò Kho / QA / Vận chuyển |
+| "Project … is closed — its records are locked" | Dự án đã đóng / huỷ. Ban Giám đốc mở lại dự án nếu thật sự cần sửa |
+| "The project cannot be closed yet: …" | Xử lý các mục còn mở trong checklist đóng dự án (danh sách in trong thông báo lỗi) |
+| "Over-issue …" / "Over-payment …" | Xuất vượt phiếu yêu cầu, hoặc thu / chi vượt hoá đơn / PO — kiểm tra lại số lượng / số tiền |
+| Không nhận bản tin nhắc việc | Kiểm tra dịch vụ notifier đang chạy, `digest_enabled` = true và giờ hiện tại đã qua `digest_hour` |

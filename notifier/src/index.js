@@ -3,7 +3,7 @@
 //   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM  (optional — e-mail disabled if missing)
 import pg from 'pg';
 import nodemailer from 'nodemailer';
-import { makeEmailSender, makeGchatSender, processBatch } from './worker.js';
+import { makeEmailSender, makeGchatSender, processBatch, runDigest } from './worker.js';
 
 const interval = Number(process.env.NOTIFIER_INTERVAL_SECONDS ?? 15) * 1000;
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
@@ -24,6 +24,12 @@ if (process.env.SMTP_HOST) {
 let stopping = false;
 async function loop() {
   while (!stopping) {
+    try {
+      const d = await runDigest(pool);
+      if (d) console.log(`[notifier] daily digest queued ${d} reminders`);
+    } catch (e) {
+      console.error('[notifier] digest error:', e.message);
+    }
     try {
       const r = await processBatch(pool, senders);
       if (r.sent || r.failed || r.retried) console.log(`[notifier] sent=${r.sent} retried=${r.retried} failed=${r.failed}`);

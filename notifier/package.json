@@ -1,6 +1,6 @@
 {
   "name": "apillis-pm-notifier",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Delivers notification_outbox rows by e-mail (SMTP) and Google Chat webhook",

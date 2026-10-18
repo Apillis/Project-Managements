@@ -134,7 +134,7 @@ Template download → upload → validation preview (required fields, look-ups b
 
 ## 9. Wave 2 (out of MVP)
 
-Accounting (invoices, payments, milestone billing, P&L), Logistics (shipments, carriers, freight cost), integrations (MISA, BOM price API, Fabrication PM), Power BI read-only role, mobile scanning PWA.
+~~Accounting (invoices, payments, milestone billing, P&L), Logistics (shipments, carriers, freight cost)~~ — delivered in v1.2 (§12) as project-level control; the legal books stay in MISA. Still open: integrations (MISA, BOM price API, Fabrication PM), Power BI read-only role, mobile scanning PWA, approval delegation (deputy while on leave).
 
 ## 10. Verification status (v1.0.0, 2026-10-14)
 
@@ -175,3 +175,31 @@ New Excel exports: multi-level BOM, flattened BOM, net requirement, cost estimat
 | `web` (+ header detection & mapping, level → tree, Ecount normalisation, raw workbook reader, ref pickers search text columns only, v1.1 enums/i18n, client vs DB unit normalisation) | 66 / 66 pass |
 | `notifier`, `deploy` | 8 / 8, 2 / 2 pass |
 | `e2e` (+ Structure BOM import from a customer-format workbook, net requirement, BOM Excel export, cost estimate → approval → quotation, RFQ → send → quote → award → PO, Ecount import) | pass, no browser errors |
+
+## 12. v1.2 — gap analysis against the SRS and practice (2026-10-17)
+
+The v1.1 code was reviewed module by module against the SRS (`SRS - Enterprise Project Management Life Cycle Software.docx`) and day-to-day use. Gaps found and how v1.2 closes them:
+
+| # | Gap | Source | v1.2 implementation |
+|---|---|---|---|
+| 1 | Warehouse issued material freely; SRS: "issued to the site based on approved PMO requests" | SRS phase 3 | `material_requests` + lines (approval doc type `material_request`, default approver PMO), `stock_moves.mr_line_id` (no over-issue, consuming project forced), setting `issue_requires_request`; page **Issue to projects** |
+| 2 | No Logistics module (role existed without a screen); SRS export "Freight cost by route / project" | SRS roles, phase 3, §5 | `shipments` + packing-list lines (carrier check, status stamps, delivered notification), `v_shipments`, `v_freight_by_route`; freight is part of project cost |
+| 3 | No Accountancy module: prepayment, milestone billing, collections, P&L, cash flow | SRS phases 1, 4, 5, §5 | `billing_milestones` (% of SO ≤ 100 %, tied to an IDEF0 activity → *ready* + Accounting notified), `invoices` + lines (draft → issued → partially paid / paid, lines locked once issued, e-invoice no.), `payments` in / out (capped by invoice / PO total, immutable, partner role checked), RPC `create_invoice_from_milestone`; views `v_invoices`, `v_receivables` (aging), `v_payments`, `v_project_pnl`, `v_project_cashflow` (actual + forecast); `v_project_cost` now includes freight |
+| 4 | Closing a project locked nothing | SRS phase 5 "locking all documents" | `project_close_check()` checklist (12 items) enforced when status → closed (`project_close_strict`); `trg_project_lock` on 32 project tables makes every record of a closed / cancelled project read-only; only Management reopens; closed projects cannot be deleted; warranty tickets stay open |
+| 5 | No reminders: overdue work was only visible when someone opened the app | practice | `app.run_daily_digest()` (once a day after `digest_hour`, recipient language, idempotent via `digest_runs`), called by the notifier every cycle; "Send digest now" in Settings |
+| 6 | Bug: approval inbox opened `/r/undefined/…` for cost estimates | code review | `DOC_ROUTE` typed over every approvable doc type (compile-time completeness) + unit test |
+| 7 | Bug: PO filter of the receiving page read `purchase_orders`, empty for the Warehouse role (no price right) | code review | `v_po_receiving_docs` (built on `v_po_receiving`, no prices) |
+| 8 | No self-service password reset | practice | "Forgot password?" on the login page (Supabase recovery e-mail → profile page) |
+| 9 | Two v1.1 settings had no Vietnamese label | contract test added in v1.2 | labels added; the contract test now checks every `app_settings` key |
+
+New Excel exports (46 in total): material requests, shipments, freight by route, billing milestones, invoices, receivables aging, payments, project P&L, project cash flow. New permission resources: `mr`, `logistics`, `invoices`, `payments` (defaults in migration 0018).
+
+### Verification status (v1.2.0, 2026-10-17)
+
+| Suite | Result |
+|---|---|
+| `db-tests` (+ material request approval / issue / over-issue, receiving headers without prices, shipments & freight by route, milestones % cap and activity trigger, invoice issue / lock / payments / over-payment / cancel, vendor payment cap, P&L and cash-flow figures, closure checklist / lock / reopen, cancelled project lock vs. approval withdrawal, digest once-a-day and language, permission defaults) | 66 / 66 pass |
+| `web` (+ finance helpers, approval routes, v1.2 enums vs. DB, closure codes and settings labels vs. DB, i18n of all new keys) | 73 / 73 pass, typecheck clean, production build OK |
+| `notifier` (+ digest queued by the DB once a day and delivered by e-mail) | 9 / 9 pass |
+| `deploy` | 2 / 2 pass, `bash -n` OK |
+| `e2e` (+ material request → approval → issue page, shipment planned → in transit → delivered, invoice → issue → payment → P&L / cash flow / receivables, closure checklist blocks closing) — run in the `mcr.microsoft.com/playwright:v1.56.1-noble` container against PostgreSQL 16 | pass, no browser errors |

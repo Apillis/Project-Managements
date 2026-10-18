@@ -10,3 +10,4 @@ e2e/.stack/
 e2e/artifacts/
 *.log
 .DS_Store
+*.tsbuildinfo

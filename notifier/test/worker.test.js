@@ -2,7 +2,7 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
-import { backoffMinutes, makeEmailSender, makeGchatSender, processBatch } from '../src/worker.js';
+import { backoffMinutes, makeEmailSender, makeGchatSender, processBatch, runDigest } from '../src/worker.js';
 
 const url = process.env.TEST_DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/pm_test';
 const pool = new pg.Pool({ connectionString: url, max: 3 });
@@ -96,4 +96,29 @@ test('e-mail sender maps outbox fields to nodemailer', async () => {
   const s = makeEmailSender({ sendMail: async (m) => sent.push(m) }, 'pm@apillis.com');
   await s({ recipient: 'a@apillis.com', subject: '[Apillis PM] Approval', body: 'Please approve' });
   assert.deepEqual(sent[0], { from: 'pm@apillis.com', to: 'a@apillis.com', subject: '[Apillis PM] Approval', text: 'Please approve' });
+});
+
+test('daily digest: queued by the database once a day, then delivered by e-mail', async () => {
+  const setting = (k, v) => pool.query(`update public.app_settings set value = $2::jsonb where key = $1`, [k, JSON.stringify(v)]);
+  await setting('digest_hour', 0);
+  await setting('notify_email_enabled', true);
+  await pool.query('delete from public.digest_runs');
+  const email = `digest.${Date.now()}@apillis.com`;
+  const { rows: [u] } = await pool.query(`insert into auth.users(email) values ($1) returning id`, [email]);
+  const { rows: [p] } = await pool.query(`insert into public.projects(code, name) values ($1, 'Digest test') returning id`, ['DG' + Date.now()]);
+  const { rows: [root] } = await pool.query(`insert into public.activities(project_id, title) values ($1, 'root') returning id`, [p.id]);
+  await pool.query(`insert into public.activities(project_id, parent_id, title, assignee_id, planned_start, planned_end)
+                    values ($1, $2, 'Overdue', $3, current_date - 9, current_date - 5)`, [p.id, root.id, u.id]);
+  try {
+    assert.ok(await runDigest(pool) >= 1);
+    assert.equal(await runDigest(pool), 0, 'second run the same day does nothing');
+    const mail = [];
+    await processBatch(pool, { email: async (row) => mail.push(row), gchat: async () => {} });
+    const mine = mail.find((m) => m.recipient === email);
+    assert.equal(mine?.subject, '[Apillis PM] Việc quá hạn: 1');
+  } finally {
+    await setting('digest_hour', 7);
+    await setting('notify_email_enabled', false);
+  }
+  assert.equal(await runDigest({ query: async () => ({ rows: [{ n: '3' }] }) }), 3);
 });

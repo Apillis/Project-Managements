@@ -3,6 +3,8 @@
 // sign-up → IDEF0 plan → BOM → approval → PR → PO → receiving → stock → Excel export,
 // v1.1: Structure-BOM import (multi-level) → net requirement → cost estimate (A–L)
 // → quotation → RFQ (send, quote, award, POs) → Ecount item import.
+// v1.2: material request → issue, shipment, invoice → payment → P&L / cash flow,
+// project closure checklist.
 import { chromium } from 'playwright';
 import ExcelJS from 'exceljs';
 import { mkdirSync } from 'node:fs';
@@ -331,6 +333,96 @@ try {
   assert.match(String(ws.getCell('A6').value), /^PO-\d{4}-\d{4}$/);
   await shot('export-center');
   log(`Excel export downloaded and verified (${dl.suggestedFilename()})`);
+
+  // ------------------------------------------------------------ v1.2 material request → approval → issue to the project
+  page.on('dialog', (d) => void d.accept());   // confirm() prompts (issue invoice, close …)
+  await page.goto(`${BASE}/r/material_requests/new?project=${projectId}`);
+  await page.locator('label.field', { hasText: 'Tiêu đề' }).first().locator('input').fill('Wiring kit A53');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.waitForURL(/\/r\/material_requests\/[0-9a-f-]{36}$/);
+  await page.getByRole('button', { name: '+ Thêm dòng' }).click();
+  {
+    const drawer = page.locator('.drawer');
+    await pickRef(/^Vật tư/, 'EL1008', 'EL1008', drawer);
+    await drawer.locator('label.field', { hasText: 'Số lượng' }).locator('input').fill('2');
+    await drawer.getByRole('button', { name: 'Lưu' }).click();
+    await drawer.waitFor({ state: 'detached' });
+  }
+  await page.locator('table.data tbody tr', { hasText: 'BK-EL1008' }).first().waitFor();
+  await page.getByRole('button', { name: 'Gửi duyệt' }).click();
+  await toast(/Đã gửi duyệt/);
+  await page.getByRole('button', { name: '✔ Duyệt' }).click();
+  await page.locator('.dialog').getByRole('button', { name: 'Duyệt' }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đã duyệt' }).waitFor({ timeout: 10000 });
+  await page.goto(`${BASE}/warehouse/issue`);
+  {
+    const row = page.locator('table.data tbody tr', { hasText: 'BK-EL1008' }).first();
+    await row.waitFor({ timeout: 10000 });
+    const inp = row.locator('.ref input');
+    await inp.click();
+    await inp.fill('RECV');
+    const opt = row.locator('.ref .menu div').filter({ hasText: 'RECV' }).first();
+    await opt.waitFor({ timeout: 10000 });
+    await opt.dispatchEvent('mousedown');
+    await shot('issue-to-project');
+    await row.getByRole('button', { name: /Xuất/ }).click();
+    await toast(/Đã xuất kho/);
+  }
+  await page.getByText('Không có phiếu nào chờ xuất').waitFor({ timeout: 10000 });
+  log('material request created, approved and issued from the project stock (no over-issue possible)');
+
+  // ------------------------------------------------------------ v1.2 shipment with freight cost
+  await page.goto(`${BASE}/r/shipments/new?project=${projectId}`);
+  await page.locator('label.field', { hasText: 'Nơi đi' }).locator('input').fill('Apillis Đông An');
+  await page.locator('label.field', { hasText: 'Nơi đến' }).locator('input').fill('ACME Stuttgart');
+  await pickRef('Đơn vị vận tải', 'DHL', 'DHL');
+  await page.locator('label.field', { hasText: 'Cước vận chuyển' }).locator('input').fill('15000000');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.waitForURL(/\/r\/shipments\/[0-9a-f-]{36}$/);
+  await page.getByRole('button', { name: '→ Đang vận chuyển' }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đang vận chuyển' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: '→ Đã giao' }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đã giao' }).waitFor({ timeout: 10000 });
+  await shot('shipment-delivered');
+  log('shipment planned → in transit → delivered with freight cost on the project');
+
+  // ------------------------------------------------------------ v1.2 invoice → payment → P&L / cash flow
+  await page.goto(`${BASE}/r/invoices/new?project=${projectId}`);
+  await pickRef('Khách hàng', 'ACME', 'ACME');
+  await page.getByRole('button', { name: 'Lưu' }).click();
+  await page.waitForURL(/\/r\/invoices\/[0-9a-f-]{36}$/);
+  await page.getByRole('button', { name: '+ Thêm dòng' }).click();
+  {
+    const drawer = page.locator('.drawer');
+    await drawer.locator('label.field', { hasText: 'Mô tả' }).locator('input').fill('30% advance payment');
+    await drawer.locator('label.field', { hasText: 'Đơn giá' }).locator('input').fill('500000000');
+    await drawer.getByRole('button', { name: 'Lưu' }).click();
+    await drawer.waitFor({ state: 'detached' });
+  }
+  await page.locator('table.data tbody tr', { hasText: '30% advance' }).first().waitFor();
+  await page.getByRole('button', { name: /Phát hành/ }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đã phát hành' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /Ghi nhận thu tiền/ }).click();
+  await page.locator('.drawer').getByRole('button', { name: 'Lưu' }).click();
+  await page.locator('.page-head .badge', { hasText: 'Đã thanh toán' }).waitFor({ timeout: 10000 });
+  await shot('invoice-paid');
+  await page.goto(`${BASE}/finance`);
+  await page.locator('table.data tbody tr', { hasText: 'DEMO-001' }).first().waitFor({ timeout: 10000 });
+  await shot('finance-pnl');
+  await page.getByRole('tab', { name: 'Dòng tiền' }).click();
+  await page.locator('table.data tbody tr').first().waitFor({ timeout: 10000 });
+  await page.getByRole('tab', { name: 'Công nợ phải thu' }).click();
+  await page.getByText('Quá hạn trên 90 ngày').waitFor();
+  log('invoice issued and fully paid; P&L, cash flow and receivables aging render');
+
+  // ------------------------------------------------------------ v1.2 project closure checklist
+  await page.goto(`${projectUrl}?tab=overview`);
+  await page.getByRole('button', { name: /Đóng dự án/ }).click();
+  await page.locator('.dialog').getByText('Công việc chưa hoàn thành').waitFor({ timeout: 10000 });
+  assert.equal(await page.locator('.dialog').getByRole('button', { name: /Đóng dự án/ }).isDisabled(), true, 'closing blocked while work is open');
+  await shot('close-checklist');
+  await page.locator('.dialog').getByRole('button', { name: 'Huỷ' }).click();
+  log('project closure checklist shows the open items and blocks closing');
 
   // ------------------------------------------------------------ approvals, settings, timesheets
   await page.goto(`${BASE}/approvals`);

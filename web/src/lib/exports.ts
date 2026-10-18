@@ -15,7 +15,7 @@ export interface XColumn {
 
 export interface ExportSpec {
   key: string;
-  module: 'sales' | 'projects' | 'engineering' | 'procurement' | 'warehouse' | 'quality' | 'service' | 'finance' | 'master';
+  module: 'sales' | 'projects' | 'engineering' | 'procurement' | 'warehouse' | 'logistics' | 'quality' | 'service' | 'finance' | 'master';
   title: string;          // i18n key
   purpose: string;        // i18n key: why this export exists
   kind: 'list' | 'analysis';
@@ -25,6 +25,8 @@ export interface ExportSpec {
   dateColumn?: string;
   statusColumn?: string;
   statuses?: readonly string[];
+  /** i18n enum of the status filter values (default: status) */
+  statusEnumKey?: string;
   orderBy?: { column: string; asc?: boolean }[];
   columns: XColumn[];
 }
@@ -280,7 +282,7 @@ export const EXPORTS: ExportSpec[] = [
   {
     key: 'stock_moves', module: 'warehouse', kind: 'list', title: 'x.stock_moves', purpose: 'xp.stock_moves',
     source: 'v_stock_moves', resource: 'warehouse', projectColumn: 'project_id', dateColumn: 'move_date', statusColumn: 'move_type',
-    statuses: E.moveType, orderBy: [{ column: 'move_date' }],
+    statuses: E.moveType, statusEnumKey: 'moveType', orderBy: [{ column: 'move_date' }],
     columns: [c('doc_no', 'f.doc_no'), c('move_date', 'f.move_date', 'datetime'), c('move_type', 'f.move_type', 'enum', { enumKey: 'moveType' }),
       c('sku', 'f.sku'), c('item_name', 'f.item'), c('qty', 'f.qty', 'number'), c('uom', 'f.uom'), c('from_location', 'f.from_location'),
       c('to_location', 'f.to_location'), c('project_code', 'f.stock_bucket'), c('consume_project_code', 'f.consume_project'),
@@ -308,6 +310,40 @@ export const EXPORTS: ExportSpec[] = [
     columns: [c('sku', 'f.sku'), c('item_name', 'f.item'), c('uom', 'f.uom'), c('min_stock', 'f.min_stock', 'number'),
       c('free_qty', 'f.free_qty', 'number'), c('total_qty', 'f.total_qty', 'number'), c('shortage_qty', 'f.shortage_qty', 'number'),
       c('default_vendor', 'f.default_vendor'), c('lead_time_days', 'f.lead_time_days', 'number')],
+  },
+  {
+    key: 'material_requests', module: 'warehouse', kind: 'list', title: 'x.material_requests', purpose: 'xp.material_requests',
+    source: 'v_material_request_lines', resource: 'mr', projectColumn: 'project_id', dateColumn: 'needed_by', statusColumn: 'mr_status',
+    statuses: E.mrStatus, orderBy: [{ column: 'mr_no' }, { column: 'line_no' }],
+    columns: [c('mr_no', 'f.doc_no'), c('mr_status', 'f.status', 'status'), c('project_code', 'f.project'), c('needed_by', 'f.needed_by', 'date'),
+      c('deliver_to', 'f.deliver_to'), c('priority', 'f.priority', 'enum', { enumKey: 'priority' }), c('line_no', 'f.line_no', 'number'),
+      c('sku', 'f.sku'), c('description', 'f.description', 'text', { width: 40 }), c('qty', 'f.qty', 'number'), c('uom', 'f.uom'),
+      c('issued_qty', 'f.issued_qty', 'number'), c('open_qty', 'f.open_qty', 'number'), c('project_stock', 'f.project_stock', 'number'),
+      c('free_stock', 'f.free_stock', 'number')],
+  },
+  // ------------------------------------------------------------------ logistics
+  {
+    key: 'shipments', module: 'logistics', kind: 'list', title: 'x.shipments', purpose: 'xp.shipments',
+    source: 'v_shipments', resource: 'logistics', projectColumn: 'project_id', dateColumn: 'planned_ship_date', statusColumn: 'status',
+    statuses: E.shipmentStatus, orderBy: [{ column: 'planned_ship_date' }, { column: 'doc_no' }],
+    columns: [c('doc_no', 'f.doc_no'), c('direction', 'f.direction', 'enum', { enumKey: 'shipmentDirection' }), c('status', 'f.status', 'status'),
+      c('project_code', 'f.project'), c('sales_order_no', 'f.sales_order'), c('po_no', 'f.po'), c('carrier_name', 'f.carrier'),
+      c('origin', 'f.origin'), c('destination', 'f.destination'), c('vehicle', 'f.vehicle'), c('driver', 'f.driver'),
+      c('tracking_no', 'f.tracking_no'), c('incoterm', 'f.incoterm'), c('packages', 'f.packages_count', 'number'),
+      c('gross_weight_kg', 'f.gross_weight_kg', 'number'), c('volume_m3', 'f.volume_m3', 'number'),
+      c('planned_ship_date', 'f.planned_ship_date', 'date'), c('planned_delivery_date', 'f.planned_delivery_date', 'date'),
+      c('shipped_at', 'f.shipped_at', 'datetime'), c('delivered_at', 'f.delivered_at', 'datetime'), c('transit_days', 'f.transit_days', 'number'),
+      c('freight_cost', 'f.freight_cost', 'money'), c('other_cost', 'f.other_cost', 'money'), c('currency_code', 'f.currency_code'),
+      c('total_cost_base', 'f.total_cost_base', 'money'), c('is_late', 'f.is_late', 'bool'), c('on_time', 'f.on_time', 'bool')],
+  },
+  {
+    key: 'freight_by_route', module: 'logistics', kind: 'analysis', title: 'x.freight_by_route', purpose: 'xp.freight_by_route',
+    source: 'v_freight_by_route', resource: 'logistics', projectColumn: 'project_id', orderBy: [{ column: 'route' }, { column: 'project_code' }],
+    columns: [c('route', 'f.route', 'text', { width: 36 }), c('direction', 'f.direction', 'enum', { enumKey: 'shipmentDirection' }),
+      c('project_code', 'f.project'), c('carrier_name', 'f.carrier'), c('shipments', 'f.shipments', 'number'), c('delivered', 'f.delivered', 'number'),
+      c('on_time_pct', 'f.on_time_pct', 'percent'), c('total_cost_base', 'f.total_cost_base', 'money'), c('avg_cost_base', 'f.avg_cost_base', 'money'),
+      c('gross_weight_kg', 'f.gross_weight_kg', 'number'), c('cost_per_kg_base', 'f.cost_per_kg_base', 'money'),
+      c('avg_transit_days', 'f.avg_transit_days', 'number'), c('first_ship_date', 'f.first_ship_date', 'date'), c('last_ship_date', 'f.last_ship_date', 'date')],
   },
   // ------------------------------------------------------------------ quality
   {
@@ -369,6 +405,69 @@ export const EXPORTS: ExportSpec[] = [
       c('total_cost_base', 'f.total_cost_base', 'money'), c('gross_margin_base', 'f.gross_margin_base', 'money')],
   },
   {
+    key: 'project_pnl', module: 'finance', kind: 'analysis', title: 'x.project_pnl', purpose: 'xp.project_pnl',
+    source: 'v_project_pnl', resource: 'finance', projectColumn: 'project_id', statusColumn: 'status', statuses: E.projectStatus,
+    orderBy: [{ column: 'project_code' }],
+    columns: [c('project_code', 'f.project'), c('project_name', 'f.name', 'text', { width: 36 }), c('customer_name', 'f.customer'),
+      c('status', 'f.status', 'status'), c('contract_value_base', 'f.contract_value_base', 'money'), c('budget_base', 'f.budget_base', 'money'),
+      c('invoiced_base', 'f.invoiced_base', 'money'), c('unbilled_base', 'f.unbilled_base', 'money'), c('collected_base', 'f.collected_base', 'money'),
+      c('receivable_base', 'f.receivable_base', 'money'), c('overdue_receivable_base', 'f.overdue_receivable_base', 'money'),
+      c('approved_hours', 'f.approved_hours', 'number'), c('labor_cost_base', 'f.labor_cost_base', 'money'),
+      c('po_committed_base', 'f.po_committed_base', 'money'), c('po_received_base', 'f.po_received_base', 'money'),
+      c('freight_cost_base', 'f.freight_cost_base', 'money'), c('total_cost_base', 'f.total_cost_base', 'money'),
+      c('gross_margin_base', 'f.gross_margin_base', 'money'), c('gross_margin_pct', 'f.gross_margin_pct', 'percent'),
+      c('budget_remaining_base', 'f.budget_remaining_base', 'money'), c('paid_out_base', 'f.paid_out_base', 'money'),
+      c('net_cash_base', 'f.net_cash_base', 'money')],
+  },
+  {
+    key: 'project_cashflow', module: 'finance', kind: 'analysis', title: 'x.project_cashflow', purpose: 'xp.project_cashflow',
+    source: 'v_project_cashflow', resource: 'finance', projectColumn: 'project_id', dateColumn: 'month',
+    orderBy: [{ column: 'project_code' }, { column: 'month' }],
+    columns: [c('project_code', 'f.project'), c('month', 'f.month', 'date'), c('actual_in', 'f.actual_in', 'money'),
+      c('actual_out', 'f.actual_out', 'money'), c('forecast_in', 'f.forecast_in', 'money'), c('forecast_out', 'f.forecast_out', 'money'),
+      c('net_flow', 'f.net_flow', 'money'), c('cumulative_net', 'f.cumulative_net', 'money'), c('is_past', 'f.is_past', 'bool')],
+  },
+  {
+    key: 'billing_milestones', module: 'finance', kind: 'list', title: 'x.billing_milestones', purpose: 'xp.billing_milestones',
+    source: 'v_billing_milestones', resource: 'invoices', projectColumn: 'project_id', dateColumn: 'planned_date', statusColumn: 'status',
+    statuses: E.milestoneStatus, orderBy: [{ column: 'project_code' }, { column: 'seq' }],
+    columns: [c('project_code', 'f.project'), c('seq', 'f.seq', 'number'), c('name', 'f.name', 'text', { width: 30 }),
+      c('sales_order_no', 'f.sales_order'), c('percent', 'f.percent', 'percent'), c('amount_due', 'f.amount_due', 'money'),
+      c('currency_code', 'f.currency_code'), c('amount_due_base', 'f.amount_due_base', 'money'), c('node_code', 'f.trigger_activity'),
+      c('activity_title', 'f.activity'), c('activity_status', 'f.activity_status', 'status'), c('planned_date', 'f.planned_date', 'date'),
+      c('invoice_no', 'f.invoice'), c('invoice_status', 'f.invoice_status', 'status'), c('status', 'f.status', 'status'), c('is_late', 'f.is_late', 'bool')],
+  },
+  {
+    key: 'invoices', module: 'finance', kind: 'list', title: 'x.invoices', purpose: 'xp.invoices',
+    source: 'v_invoices', resource: 'invoices', projectColumn: 'project_id', dateColumn: 'invoice_date', statusColumn: 'status',
+    statuses: E.invoiceStatus, orderBy: [{ column: 'invoice_date' }, { column: 'doc_no' }],
+    columns: [c('doc_no', 'f.doc_no'), c('invoice_date', 'f.invoice_date', 'date'), c('external_ref', 'f.external_ref'),
+      c('customer_code', 'f.customer_code'), c('customer_name', 'f.customer'), c('project_code', 'f.project'), c('sales_order_no', 'f.sales_order'),
+      c('milestone_name', 'r.billing_milestone'), c('currency_code', 'f.currency_code'), c('net_amount', 'f.net_amount', 'money'),
+      c('tax_amount', 'f.tax_amount', 'money'), c('total_amount', 'f.total_amount', 'money'), c('paid_amount', 'f.paid_amount', 'money'),
+      c('balance', 'f.balance', 'money'), c('total_amount_base', 'f.total_amount_base', 'money'), c('due_date', 'f.due_date', 'date'),
+      c('status', 'f.status', 'status'), c('days_overdue', 'f.days_overdue', 'number')],
+  },
+  {
+    key: 'receivables', module: 'finance', kind: 'analysis', title: 'x.receivables', purpose: 'xp.receivables',
+    source: 'v_receivables', resource: 'invoices', projectColumn: 'project_id', dateColumn: 'due_date',
+    orderBy: [{ column: 'customer_name' }, { column: 'due_date' }],
+    columns: [c('customer_name', 'f.customer'), c('doc_no', 'f.doc_no'), c('external_ref', 'f.external_ref'), c('project_code', 'f.project'),
+      c('invoice_date', 'f.invoice_date', 'date'), c('due_date', 'f.due_date', 'date'), c('currency_code', 'f.currency_code'),
+      c('total_amount', 'f.total_amount', 'money'), c('paid_amount', 'f.paid_amount', 'money'), c('balance', 'f.balance', 'money'),
+      c('balance_base', 'f.balance_base', 'money'), c('days_overdue', 'f.days_overdue', 'number'), c('aging_bucket', 'f.age_bucket')],
+  },
+  {
+    key: 'payments', module: 'finance', kind: 'list', title: 'x.payments', purpose: 'xp.payments',
+    source: 'v_payments', resource: 'payments', projectColumn: 'project_id', dateColumn: 'payment_date', statusColumn: 'direction',
+    statuses: E.paymentDirection, statusEnumKey: 'paymentDirection', orderBy: [{ column: 'payment_date' }, { column: 'doc_no' }],
+    columns: [c('doc_no', 'f.doc_no'), c('payment_date', 'f.payment_date', 'date'), c('direction', 'f.direction', 'enum', { enumKey: 'paymentDirection' }),
+      c('partner_code', 'f.code'), c('partner_name', 'f.partner'), c('project_code', 'f.project'), c('invoice_no', 'f.invoice'), c('po_no', 'f.po'),
+      c('amount', 'f.amount', 'money'), c('currency_code', 'f.currency_code'), c('amount_base', 'f.amount_base', 'money'),
+      c('signed_amount_base', 'f.signed_amount_base', 'money'), c('method', 'f.method', 'enum', { enumKey: 'paymentMethod' }),
+      c('reference', 'f.reference'), c('created_by_name', 'f.created_by')],
+  },
+  {
     key: 'partners', module: 'master', kind: 'list', title: 'x.partners', purpose: 'xp.partners',
     source: 'partners', resource: 'partners', orderBy: [{ column: 'code' }],
     columns: [c('code', 'f.code'), c('name', 'f.name', 'text', { width: 40 }), c('is_customer', 'f.is_customer', 'bool'),
@@ -389,7 +488,7 @@ export const EXPORTS: ExportSpec[] = [
   },
 ];
 
-export const EXPORT_MODULES = ['sales', 'projects', 'engineering', 'procurement', 'warehouse', 'quality', 'service', 'finance', 'master'] as const;
+export const EXPORT_MODULES = ['sales', 'projects', 'engineering', 'procurement', 'warehouse', 'logistics', 'quality', 'service', 'finance', 'master'] as const;
 
 export function findExport(key: string): ExportSpec | undefined {
   return EXPORTS.find((e) => e.key === key);

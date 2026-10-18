@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { fmtDateTime } from '../lib/format';
 import type { Notification } from '../lib/types';
 
-interface NavItem { to: string; label: string; resource?: string; icon: string; badge?: number }
+interface NavItem { to: string; label: string; resource?: string; icon: string; badge?: number; /** also needs write on this resource */ write?: string }
 interface NavGroup { label: string; items: NavItem[] }
 
 function useNavGroups(pending: number): NavGroup[] {
@@ -42,8 +42,13 @@ function useNavGroups(pending: number): NavGroup[] {
     ] },
     { label: 'nav.warehouse', items: [
       { to: '/warehouse/receiving', label: 'nav.receiving', icon: '⇩', resource: 'po_receiving' },
+      { to: '/r/material_requests', label: 'r.material_requests', icon: '✎', resource: 'mr' },
+      { to: '/warehouse/issue', label: 'nav.issue', icon: '⇧', resource: 'mr', write: 'warehouse' },
       { to: '/warehouse/stock', label: 'nav.stock', icon: '▤', resource: 'warehouse' },
       { to: '/r/stock_moves', label: 'r.stock_moves', icon: '⇄', resource: 'warehouse' },
+    ] },
+    { label: 'nav.logistics', items: [
+      { to: '/r/shipments', label: 'r.shipments', icon: '🚚', resource: 'logistics' },
     ] },
     { label: 'nav.quality', items: [
       { to: '/r/inspections', label: 'r.inspections', icon: '🔍', resource: 'qa' },
@@ -52,6 +57,12 @@ function useNavGroups(pending: number): NavGroup[] {
     ] },
     { label: 'nav.service', items: [
       { to: '/r/service_tickets', label: 'r.service_tickets', icon: '🛠', resource: 'service' },
+    ] },
+    { label: 'nav.finance', items: [
+      { to: '/finance', label: 'nav.finance', icon: '∑', resource: 'invoices' },
+      { to: '/r/billing_milestones', label: 'r.billing_milestones', icon: '◷', resource: 'invoices' },
+      { to: '/r/invoices', label: 'r.invoices', icon: '🧾', resource: 'invoices' },
+      { to: '/r/payments', label: 'r.payments', icon: '₫', resource: 'payments' },
     ] },
     { label: 'nav.data', items: [
       { to: '/exports', label: 'nav.exports', icon: '⬇' },
@@ -141,7 +152,7 @@ export function Layout() {
   }, [loc.pathname, session?.user.id]);
 
   const groups = useNavGroups(pending)
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.resource || can(i.resource, 'read')) }))
+    .map((g) => ({ ...g, items: g.items.filter((i) => (!i.resource || can(i.resource, 'read')) && (!i.write || can(i.write, 'write'))) }))
     .filter((g) => g.items.length > 0);
 
   return (

@@ -19,7 +19,7 @@ export function useExporter() {
     const { data: company } = await supabase.from('app_settings').select('value').eq('key', 'company_name').maybeSingle();
     const projectLabel = filters.projectId ? await refLabel(REF.project, filters.projectId) : undefined;
     const filterText = describeFilters(filters, {
-      project: projectLabel, status: (s) => te('status', s), from: t('a.dateFrom'), to: t('a.dateTo'),
+      project: projectLabel, status: (s) => te(spec.statusEnumKey ?? 'status', s), from: t('a.dateFrom'), to: t('a.dateTo'),
       search: t('a.search'), projectLabel: t('f.project'), statusLabel: t('f.status'), dateLabel: t('a.date'),
     });
     const { buildWorkbook, downloadWorkbook, exportFileName } = await import('../lib/excel');

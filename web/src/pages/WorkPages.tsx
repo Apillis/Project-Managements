@@ -4,16 +4,13 @@ import { useI18n } from '../lib/i18n';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { must } from '../lib/api';
-import { E } from '../lib/resources';
+import { DOC_ROUTE, docPath, E } from '../lib/resources';
 import { fmtDate, fmtDateTime, fmtMoney } from '../lib/format';
 import type { ColumnDef, Row } from '../lib/types';
 import { DataTable } from '../components/DataTable';
 import { Empty, PageHead, Progress, Spinner, StatusBadge, Tabs, useAction } from '../components/ui';
 
-export const DOC_ROUTE: Record<string, string> = {
-  quotation: 'quotations', sales_order: 'sales_orders', bom: 'boms', eco: 'ecos',
-  purchase_request: 'purchase_requests', purchase_order: 'purchase_orders',
-};
+export { DOC_ROUTE };
 
 async function count(table: string, apply: (q: any) => any): Promise<number | null> {
   const { count: c, error } = await apply(supabase.from(table).select('*', { count: 'exact', head: true }));
@@ -42,6 +39,12 @@ export function Dashboard() {
       if (can('nc')) out.openNcr = await count('ncrs', (q) => q.not('status', 'in', '(closed,cancelled)'));
       if (can('warehouse')) out.lowStock = await count('v_low_stock', (q) => q);
       if (can('po')) out.latePo = await count('v_open_po_lines', (q) => q.eq('is_late', true));
+      if (can('mr') && can('warehouse', 'write')) out.mrToIssue = await count('material_requests', (q) => q.in('status', ['approved', 'partially_issued']));
+      if (can('logistics')) out.inTransit = await count('shipments', (q) => q.in('status', ['booked', 'in_transit']));
+      if (can('invoices')) {
+        out.milestonesReady = await count('billing_milestones', (q) => q.eq('status', 'ready'));
+        out.overdueInvoices = await count('v_invoices', (q) => q.eq('is_overdue', true));
+      }
       if (alive) setK(out);
     })();
     supabase.from('v_activities').select('*').eq('assignee_id', uid).not('status', 'in', '(done,cancelled)')
@@ -61,6 +64,10 @@ export function Dashboard() {
     ['openNcr', 'db.openNcr', '/r/ncrs', 'warn'],
     ['lowStock', 'db.lowStock', '/warehouse/stock?tab=low', 'warn'],
     ['latePo', 'db.latePo', '/r/purchase_orders', 'danger'],
+    ['mrToIssue', 'db.mrToIssue', '/warehouse/issue', 'warn'],
+    ['inTransit', 'db.inTransit', '/r/shipments'],
+    ['milestonesReady', 'db.milestonesReady', '/r/billing_milestones', 'warn'],
+    ['overdueInvoices', 'db.overdueInvoices', '/finance?tab=receivables', 'danger'],
   ];
   const noRole = profile && Object.keys(k).length > 0 && !can('projects') && !can('activities');
 
@@ -86,7 +93,7 @@ export function Dashboard() {
         </div>
         <div className="card">
           <div className="card-head"><h3>{t('nav.approvals')}</h3><div className="spacer" /><Link to="/approvals">{t('a.viewAll')}</Link></div>
-          <DataTable rows={approvals} onRowClick={(r) => nav(`/r/${DOC_ROUTE[r.doc_type]}/${r.doc_id}`)} columns={[
+          <DataTable rows={approvals} onRowClick={(r) => nav(docPath(r.doc_type, r.doc_id))} columns={[
             { name: 'doc_no', label: 'f.doc_no', type: 'code' }, { name: 'doc_type', label: 'f.doc_type', type: 'select', enumKey: 'docType' },
             { name: 'amount_base', label: 'f.amount_base', type: 'money', align: 'right' }, { name: 'requested_at', label: 'f.requested_at', type: 'datetime' },
           ]} empty={t('db.noApprovals')} />
@@ -212,7 +219,7 @@ export function ApprovalsPage() {
       <Tabs tabs={[{ key: 'mine', label: t('ap.waitingMe') }, { key: 'requested', label: t('ap.myRequests') }, { key: 'all', label: t('ap.all') }]}
         value={tab} onChange={setTab} />
       <div className="card">
-        {!rows ? <Spinner /> : <DataTable rows={rows} columns={columns} onRowClick={(r) => nav(`/r/${DOC_ROUTE[r.doc_type]}/${r.doc_id}`)} empty={t('db.noApprovals')} />}
+        {!rows ? <Spinner /> : <DataTable rows={rows} columns={columns} onRowClick={(r) => nav(docPath(r.doc_type, r.doc_id))} empty={t('db.noApprovals')} />}
       </div>
     </>
   );

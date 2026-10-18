@@ -7,6 +7,8 @@ import { E, REF, RESOURCES, SUB_LINES } from '../lib/resources';
 import { normUom } from '../lib/mappedImport';
 import { EXPORTS } from '../lib/exports';
 import { IMPORTS } from '../lib/importer';
+import { CLOSE_CHECKS } from '../lib/finance';
+import { DICT } from '../lib/dict';
 import type { RefDef } from '../lib/types';
 
 const url = process.env.TEST_DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/pm_test';
@@ -163,6 +165,26 @@ describe.runIf(process.env.SKIP_DB !== '1')('UI ↔ database contract', () => {
     const { rows } = await client.query(`select import_key, field from import_mappings`);
     const bad = rows.filter((r) => !(known[r.import_key] ?? []).includes(r.field)).map((r) => `${r.import_key}.${r.field}`);
     expect(bad).toEqual([]);
+  });
+
+  it('v1.2: closure checklist codes and settings keys are known to the UI', async () => {
+    if (!client) return;
+    const { rows } = await client.query(`select check_code from app.project_close_blockers(null)`);
+    expect(rows.map((r) => r.check_code)).toEqual([...CLOSE_CHECKS]);
+    const { rows: st } = await client.query(`select key from app_settings order by key`);
+    const missing = st.map((r) => `setk.${r.key}`).filter((k) => !DICT.vi[k] || !DICT.en[k]);
+    expect(missing).toEqual([]);
+  });
+
+  it('v1.2 enums match the database check constraints', () => {
+    if (!client) return;
+    const pairs: [string, readonly string[]][] = [
+      ['material_requests', E.mrStatus], ['shipments', E.shipmentStatus], ['shipments', E.shipmentDirection],
+      ['billing_milestones', E.milestoneStatus], ['invoices', E.invoiceStatus], ['payments', E.paymentDirection],
+      ['payments', E.paymentMethod], ['approval_rules', E.docType],
+    ];
+    const errs = pairs.flatMap(([t, vals]) => vals.filter((v) => !(checks.get(t) ?? '').includes(`'${v}'`)).map((v) => `${t}: '${v}'`));
+    expect(errs).toEqual([]);
   });
 
   it('client unit normalisation equals app.norm_uom()', async () => {

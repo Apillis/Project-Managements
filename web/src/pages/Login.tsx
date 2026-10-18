@@ -5,7 +5,7 @@ import { errorKey } from '../lib/api';
 
 export function Login() {
   const { t, lang, setLang } = useI18n();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -24,6 +24,11 @@ export function Login() {
       if (mode === 'signin') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+      } else if (mode === 'reset') {
+        // the e-mail link signs the user in on the profile page, where the new password is set
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/profile?recovery=1` });
+        if (error) throw error;
+        setMsg({ kind: 'ok', text: t('login.resetSent') });
       } else {
         const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
         if (error) throw error;
@@ -55,16 +60,19 @@ export function Login() {
               <label className="field">{t('f.full_name')}<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
             )}
             <label className="field">{t('f.email')}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" placeholder="name@apillis.com" /></label>
-            <label className="field">{t('login.password')}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} /></label>
+            {mode !== 'reset' && (
+              <label className="field">{t('login.password')}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} /></label>
+            )}
             {msg && <div className={msg.kind === 'err' ? 'err small' : 'small'} style={{ color: msg.kind === 'err' ? 'var(--danger)' : 'var(--ok)' }}>{msg.text}</div>}
             <button className="btn primary" style={{ justifyContent: 'center' }} disabled={busy}>
-              {mode === 'signin' ? t('login.signIn') : t('login.signUp')}
+              {mode === 'signin' ? t('login.signIn') : mode === 'reset' ? t('login.sendReset') : t('login.signUp')}
             </button>
           </form>
           <div className="small muted">
             {mode === 'signin'
-              ? <>{t('login.noAccount')} <a href="#" onClick={(e) => { e.preventDefault(); setMode('signup'); }}>{t('login.signUp')}</a></>
-              : <>{t('login.haveAccount')} <a href="#" onClick={(e) => { e.preventDefault(); setMode('signin'); }}>{t('login.signIn')}</a></>}
+              ? <>{t('login.noAccount')} <a href="#" onClick={(e) => { e.preventDefault(); setMode('signup'); setMsg(null); }}>{t('login.signUp')}</a>
+                {' · '}<a href="#" onClick={(e) => { e.preventDefault(); setMode('reset'); setMsg(null); }}>{t('login.forgot')}</a></>
+              : <>{t('login.haveAccount')} <a href="#" onClick={(e) => { e.preventDefault(); setMode('signin'); setMsg(null); }}>{t('login.signIn')}</a></>}
           </div>
           <div className="small muted">{t('login.domainHint')}</div>
         </div>

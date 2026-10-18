@@ -15,6 +15,7 @@ import { Dialog, Empty, PageHead, Spinner, StatusBadge, useAction } from '../com
 import {
   BomActions, BomAnalysis, BuildEstimateDialog, CreatePrDialog, CreateRfqDialog, EstimateActions, EstimatePanels, RfqActions, RfqPanels,
 } from './DocPanels';
+import { InvoiceActions, InvoicePayments, MilestoneInvoiceButton } from './FinancePages';
 
 export function ResourceListPage() {
   const { key = '' } = useParams();
@@ -24,7 +25,8 @@ export function ResourceListPage() {
   return (
     <>
       <PageHead title={t(def.title)} sub={t(`mod.${def.module}`)} />
-      <ResourceTable key={def.key} def={def} />
+      <ResourceTable key={def.key} def={def}
+        rowActions={def.key === 'billing_milestones' ? (r) => <MilestoneInvoiceButton row={r} /> : undefined} />
     </>
   );
 }
@@ -110,7 +112,7 @@ export function ResourceDetailPage() {
 
   const status = String(row.status ?? 'draft');
   const canWrite = can(def.resource, 'write');
-  const editable = canWrite && (isNew || ['draft', 'rejected'].includes(status));
+  const editable = canWrite && (isNew || (def.editableStatuses ?? ['draft', 'rejected']).includes(status));
   // after submission only the whitelisted header fields stay editable (DB enforces the same list)
   const partly = !editable && canWrite && !!def.openFields?.length && !['pending_approval', 'cancelled', 'closed'].includes(status);
   const formFields = partly ? def.fields.map((f) => ({ ...f, readOnly: !def.openFields!.includes(f.name) })) : def.fields;
@@ -143,7 +145,7 @@ export function ResourceDetailPage() {
       <PageHead title={<span className="row">{label} {!isNew && <StatusBadge value={status} />}</span>} sub={t(def.titleOne)}>
         <button className="btn" onClick={() => nav(-1)}>‹ {t('a.back')}</button>
         {(editable || partly) && <button className="btn primary" disabled={busy || (!dirty && !isNew)} onClick={save}>{t('a.save')}</button>}
-        {!isNew && canWrite && status === 'draft' && !def.noDelete && (
+        {!isNew && canWrite && (def.deleteStatuses ?? ['draft']).includes(status) && !def.noDelete && (
           <button className="btn danger" disabled={busy} onClick={() => {
             if (!confirm(t('m.confirmDelete'))) return;
             void run(async () => { await must(supabase.from(def.table).delete().eq('id', id)); nav(`/r/${def.key}`); }, t('m.deleted'));
@@ -159,6 +161,7 @@ export function ResourceDetailPage() {
         {!isNew && def.key === 'boms' && <BomActions row={row} onDialog={setDialog} />}
         {!isNew && def.key === 'cost_estimates' && <EstimateActions row={row} onChanged={() => setTick(tick + 1)} />}
         {!isNew && def.key === 'rfqs' && <RfqActions row={row} onChanged={() => setTick(tick + 1)} />}
+        {!isNew && def.key === 'invoices' && <InvoiceActions row={row} view={view} onChanged={() => setTick(tick + 1)} />}
       </PageHead>
 
       <div className="stack">
@@ -171,6 +174,7 @@ export function ResourceDetailPage() {
           actions={def.key === 'boms' ? <ExportButton exportKey="bom_tree" filters={{ eq: { bom_id: id } }} /> : undefined} />}
         {!isNew && row.id === id && def.key === 'boms' && <BomAnalysis bom={row} refreshKey={tick} />}
         {!isNew && row.id === id && def.key === 'rfqs' && <RfqPanels rfq={row} onChanged={() => setTick(tick + 1)} refreshKey={tick} />}
+        {!isNew && row.id === id && def.key === 'invoices' && <InvoicePayments invoice={row} view={view} refreshKey={tick} />}
         {isNew && def.lines && <div className="card"><div className="card-body muted">{t('m.saveFirst')}</div></div>}
         {!isNew && def.docType && <ApprovalPanel docType={def.docType} docId={id} status={status} resource={def.resource} onChanged={() => setTick(tick + 1)} />}
         {!isNew && <AuditTrail table={def.table} id={id} />}

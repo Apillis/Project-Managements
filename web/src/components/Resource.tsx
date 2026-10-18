@@ -20,7 +20,7 @@ function readFilters(key: string): ActiveFilters {
 }
 
 /** List of a resource with filters, paging, export and create/edit. */
-export function ResourceTable({ def, projectId, title, compact, onOpen, extraActions, refreshKey }: {
+export function ResourceTable({ def, projectId, title, compact, onOpen, extraActions, refreshKey, rowActions }: {
   def: ResourceDef;
   projectId?: string;
   title?: string;
@@ -28,6 +28,8 @@ export function ResourceTable({ def, projectId, title, compact, onOpen, extraAct
   onOpen?: (row: Row) => void;
   extraActions?: ReactNode;
   refreshKey?: number;
+  /** buttons rendered at the end of every row */
+  rowActions?: (row: Row) => ReactNode;
 }) {
   const { t } = useI18n();
   const { can } = useAuth();
@@ -94,7 +96,7 @@ export function ResourceTable({ def, projectId, title, compact, onOpen, extraAct
       )}
       {error && <div className="empty" style={{ color: 'var(--danger)' }}>{error}</div>}
       {loading && rows.length === 0 ? <Spinner /> : (
-        <DataTable columns={def.columns} rows={rows} sort={sort} onSort={(s) => { setSort(s); setPage(0); }} onRowClick={open} />
+        <DataTable columns={def.columns} rows={rows} sort={sort} onSort={(s) => { setSort(s); setPage(0); }} onRowClick={open} actions={rowActions} />
       )}
       {count > PAGE && (
         <div className="pager">

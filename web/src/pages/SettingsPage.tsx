@@ -102,6 +102,15 @@ function GeneralSettings() {
         ))}</tbody>
       </table></div>
       <div className="card-body small muted">{t('set.smtpNote')}</div>
+      {canWrite && (
+        <div className="card-body row" style={{ borderTop: '1px solid var(--line)' }}>
+          <span className="small muted">{t('set.digestHelp')}</span><div className="spacer" />
+          <button className="btn" disabled={busy} onClick={() => run(async () => {
+            const n = await must(supabase.rpc('run_daily_digest_now'));
+            return n;
+          }, t('set.digestSent'))}>✉ {t('set.digestNow')}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -395,9 +404,11 @@ export function ProfilePage() {
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [pw, setPw] = useState('');
   if (!profile) return <Spinner />;
+  const recovery = new URLSearchParams(window.location.search).has('recovery');
   return (
     <>
       <PageHead title={t('pf.title')} sub={profile.email} />
+      {recovery && <div className="card" style={{ marginBottom: 12, borderColor: 'var(--warn)' }}><div className="card-body">🔑 {t('pf.recoveryHint')}</div></div>}
       <div className="grid cols-2">
         <div className="card"><div className="card-body stack">
           <label className="field">{t('f.full_name')}<input value={name} onChange={(e) => setName(e.target.value)} /></label>

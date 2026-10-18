@@ -57,7 +57,7 @@ export function ExportCenter() {
             <>
               <FilterBar value={filters} onChange={setFilters} search={false} project={!!spec.projectColumn}
                 statuses={spec.statuses} date={!!spec.dateColumn}
-                statusEnumKey={spec.statusColumn === 'move_type' ? 'moveType' : 'status'} />
+                statusEnumKey={spec.statusEnumKey ?? 'status'} />
               <div className="card-body stack">
                 <div className="small muted">{t('xc.columns')}: {spec.columns.map((c) => t(c.label)).join(', ')}</div>
                 {spec.dateColumn && <div className="small muted">{t('xc.dateField')}: {t(`f.${spec.dateColumn}`)}</div>}

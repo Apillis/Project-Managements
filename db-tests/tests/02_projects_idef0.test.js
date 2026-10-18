@@ -156,11 +156,12 @@ test('timesheets: own hours, 24 h cap, submit, approve, segregation of duties', 
   assert.equal(all.length, 3);
 });
 
-test('closing a project stamps closed_at', async () => {
+test('closing a project stamps closed_at; only management reopens it', async () => {
   const u = await users();
   const p = await makeProject(u.pmo);
   const [c] = await asq(u.pmo, `update projects set status = 'closed' where id = $1 returning closed_at`, [p.id]);
   assert.ok(c.closed_at);
-  const [r] = await asq(u.pmo, `update projects set status = 'active' where id = $1 returning closed_at`, [p.id]);
+  await rejects(asq(u.pmo, `update projects set status = 'active' where id = $1`, [p.id]), /Only Management/);
+  const [r] = await asq(u.management, `update projects set status = 'active' where id = $1 returning closed_at`, [p.id]);
   assert.equal(r.closed_at, null);
 });

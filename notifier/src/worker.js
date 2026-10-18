@@ -54,6 +54,17 @@ export async function processBatch(db, senders, opts = {}) {
   return result;
 }
 
+/**
+ * Daily reminder digest. The database decides whether it is time (once a day,
+ * after the configured hour, company time zone) and queues the notifications
+ * in the outbox, which processBatch then delivers.
+ * @returns {Promise<number>} notifications created (0 when not due / already sent today)
+ */
+export async function runDigest(db) {
+  const { rows } = await db.query('select app.run_daily_digest() as n');
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Google Chat incoming webhook */
 export function makeGchatSender(fetchImpl = globalThis.fetch) {
   return async (row) => {

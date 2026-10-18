@@ -8,7 +8,8 @@ import { ResourceDetailPage, ResourceListPage } from './pages/ResourcePages';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectPages';
 import { ApprovalsPage, Dashboard, MyTasksPage } from './pages/WorkPages';
 import { TimesheetPage } from './pages/TimesheetPage';
-import { ReceivingPage, StockPage } from './pages/WarehousePages';
+import { IssuePage, ReceivingPage, StockPage } from './pages/WarehousePages';
+import { FinancePage } from './pages/FinancePages';
 import { ExportCenter, ImportPage } from './pages/DataPages';
 import { AuditPage, ProfilePage, SettingsPage } from './pages/SettingsPage';
 import { DocumentsPanel } from './components/Documents';
@@ -39,6 +40,8 @@ function Gate() {
         <Route path="r/:key/:id" element={<ResourceDetailPage />} />
         <Route path="warehouse/receiving" element={<ReceivingPage />} />
         <Route path="warehouse/stock" element={<StockPage />} />
+        <Route path="warehouse/issue" element={<IssuePage />} />
+        <Route path="finance" element={<FinancePage />} />
         <Route path="exports" element={<ExportCenter />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="settings" element={<SettingsPage />} />

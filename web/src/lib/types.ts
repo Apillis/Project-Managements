@@ -94,6 +94,10 @@ export interface ResourceDef {
   openFields?: string[];
   /** statuses a user may set after approval (buttons) */
   nextStatuses?: Record<string, readonly string[]>;
+  /** statuses in which header and lines are editable (default: draft, rejected) */
+  editableStatuses?: readonly string[];
+  /** statuses in which the record may be deleted (default: draft) */
+  deleteStatuses?: readonly string[];
   lines?: LinesDef;
   /** label of a row for headings */
   rowLabel?: (row: Row) => string;

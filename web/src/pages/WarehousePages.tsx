@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { must } from '../lib/api';
 import { applyFilters, type ActiveFilters } from '../lib/query';
 import { REF, RESOURCES, newRecord } from '../lib/resources';
-import { fmtDate, fmtNumber } from '../lib/format';
+import { fmtDate, fmtNumber, isoDate } from '../lib/format';
 import type { ColumnDef, Row } from '../lib/types';
 import { DataTable } from '../components/DataTable';
 import { FilterBar } from '../components/FilterBar';
@@ -65,7 +65,8 @@ export function ReceivingPage() {
     <>
       <PageHead title={t('nav.receiving')} sub={t('rc.sub')}>
         <div style={{ width: 280 }}>
-          <RefSelect refDef={{ table: 'purchase_orders', label: ['doc_no'], orderBy: 'doc_no', whereIn: { status: ['approved', 'ordered', 'partially_received'] } }}
+          {/* v_po_receiving_docs: the warehouse has no right on purchase_orders (prices) */}
+          <RefSelect refDef={{ ...REF.poReceivingDoc, whereIn: { po_status: ['approved', 'ordered', 'partially_received'] } }}
             value={poId} onChange={(v) => setPoId((v as string) || null)} placeholder={t('rc.filterPo')} />
         </div>
         <ExportButton exportKey="po_receiving" filters={{}} />
@@ -95,6 +96,94 @@ export function ReceivingPage() {
                   </td>
                   <td className="center"><input type="checkbox" checked={x.inspect} disabled={!can('qa', 'write')} onChange={(e) => setD(r.po_line_id, r, { inspect: e.target.checked })} /></td>
                   <td><button className="btn primary sm" disabled={busy || !can('warehouse', 'write')} onClick={() => receive(r)}>⇩ {t('rc.receive')}</button></td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface IssueDraft { qty: string; location: string | null; bucket: 'project' | 'general'; lot: string; serial: string }
+
+/** Issue stock against approved material requests (SRS: "issued based on approved PMO requests"). */
+export function IssuePage() {
+  const { t, lang } = useI18n();
+  const { can } = useAuth();
+  const [sp] = useSearchParams();
+  const { busy, run } = useAction();
+  const [mrId, setMrId] = useState<string | null>(sp.get('mr'));
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, IssueDraft>>({});
+
+  const load = useCallback(async () => {
+    let q = supabase.from('v_material_request_lines').select('*').gt('open_qty', 0).in('mr_status', ['approved', 'partially_issued']);
+    if (mrId) q = q.eq('mr_id', mrId);
+    const data = (await must(q.order('needed_by', { ascending: true, nullsFirst: false }).order('mr_no').order('line_no').limit(300))) as Row[];
+    setRows(data ?? []);
+    setDrafts({});
+  }, [mrId]);
+  useEffect(() => { void load(); }, [load]);
+
+  const d = (r: Row): IssueDraft => drafts[r.id] ?? {
+    qty: String(Math.min(Number(r.open_qty), Number(r.project_stock) > 0 ? Number(r.project_stock) : Number(r.free_stock)) || r.open_qty),
+    location: null, bucket: Number(r.project_stock) > 0 ? 'project' : 'general', lot: '', serial: '',
+  };
+  const setD = (r: Row, patch: Partial<IssueDraft>) => setDrafts({ ...drafts, [r.id]: { ...d(r), ...patch } });
+
+  const issue = (r: Row) => run(async () => {
+    const x = d(r);
+    const qty = Number(x.qty);
+    if (!qty || qty <= 0) throw new Error(t('rc.qtyRequired'));
+    if (!x.location) throw new Error(t('rc.locationRequired'));
+    await must(supabase.from('stock_moves').insert({
+      move_type: 'issue', item_id: r.item_id, qty, from_location_id: x.location, mr_line_id: r.id,
+      project_id: x.bucket === 'project' ? r.project_id : null, lot_no: x.lot || null, serial_no: x.serial || null,
+    }));
+    await load();
+  }, t('is.issued'));
+
+  return (
+    <>
+      <PageHead title={t('nav.issue')} sub={t('is.sub')}>
+        <div style={{ width: 280 }}>
+          <RefSelect refDef={REF.mrOpen} value={mrId} onChange={(v) => setMrId((v as string) || null)} placeholder={t('is.filterMr')} />
+        </div>
+        <ExportButton exportKey="material_requests" filters={{ statuses: ['approved', 'partially_issued'] }} />
+      </PageHead>
+      <div className="card">
+        {!rows ? <Spinner /> : rows.length === 0 ? <Empty>{t('is.nothing')}</Empty> : (
+          <div className="table-wrap"><table className="data">
+            <thead><tr>
+              <th>{t('r.material_request')}</th><th>{t('f.project')}</th><th>{t('f.needed_by')}</th><th>{t('f.item')}</th>
+              <th className="num">{t('f.open_qty')}</th><th className="num">{t('f.project_stock')}</th><th className="num">{t('f.free_stock')}</th>
+              <th style={{ width: 90 }}>{t('f.qty')}</th><th style={{ width: 150 }}>{t('f.stock_bucket')}</th>
+              <th style={{ width: 170 }}>{t('f.from_location')}</th><th>{t('f.lot_no')} / {t('f.serial_no')}</th><th />
+            </tr></thead>
+            <tbody>{rows.map((r) => {
+              const x = d(r);
+              return (
+                <tr key={r.id}>
+                  <td className="code">{r.mr_no}<div className="small muted">{r.deliver_to}</div></td>
+                  <td className="code">{r.project_code}</td>
+                  <td className="nowrap" style={{ color: r.needed_by && r.needed_by < isoDate() ? 'var(--danger)' : undefined }}>{fmtDate(r.needed_by, lang)}</td>
+                  <td><span className="code">{r.sku}</span><div className="small">{r.description}</div></td>
+                  <td className="num">{fmtNumber(r.open_qty, lang)} {r.uom}</td>
+                  <td className="num">{fmtNumber(r.project_stock, lang)}</td>
+                  <td className="num">{fmtNumber(r.free_stock, lang)}</td>
+                  <td><input type="number" min={0} value={x.qty} onChange={(e) => setD(r, { qty: e.target.value })} /></td>
+                  <td><select value={x.bucket} onChange={(e) => setD(r, { bucket: e.target.value as IssueDraft['bucket'] })}>
+                    <option value="project">{t('is.fromProject')}</option><option value="general">{t('st.general')}</option>
+                  </select></td>
+                  <td><RefSelect refDef={REF.location} value={x.location} onChange={(v) => setD(r, { location: v as string })} /></td>
+                  <td>
+                    {r.track_lot && <input placeholder={t('f.lot_no')} value={x.lot} onChange={(e) => setD(r, { lot: e.target.value })} />}
+                    {r.track_serial && <input placeholder={t('f.serial_no')} value={x.serial} onChange={(e) => setD(r, { serial: e.target.value, qty: '1' })} />}
+                    {!r.track_lot && !r.track_serial && <span className="muted small">—</span>}
+                  </td>
+                  <td><button className="btn primary sm" disabled={busy || !can('warehouse', 'write')} onClick={() => issue(r)}>⇧ {t('is.issue')}</button></td>
                 </tr>
               );
             })}</tbody>

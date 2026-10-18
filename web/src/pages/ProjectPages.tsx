@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { must } from '../lib/api';
 import { E, RESOURCES, newRecord, toPayload, validate } from '../lib/resources';
-import { fmtDate, fmtMoney, fmtNumber } from '../lib/format';
+import { fmtDate, fmtNumber } from '../lib/format';
 import type { ColumnDef, Row } from '../lib/types';
 import { ResourceTable } from '../components/Resource';
 import { DataTable } from '../components/DataTable';
@@ -14,8 +14,10 @@ import { Idef0Workspace } from '../components/Idef0';
 import { DocumentsPanel } from '../components/Documents';
 import { ExportButton } from '../components/ExportButton';
 import { StatusPicker } from '../components/FilterBar';
-import { Empty, PageHead, Progress, Spinner, StatusBadge, Tabs, useAction } from '../components/ui';
+import { Dialog, Empty, PageHead, Progress, Spinner, StatusBadge, Tabs, useAction } from '../components/ui';
+import { closeBlockers } from '../lib/finance';
 import { AuditTrail } from './ResourcePages';
+import { ProjectFinance } from './FinancePages';
 
 export function ProjectsPage() {
   const { t } = useI18n();
@@ -27,15 +29,16 @@ export function ProjectsPage() {
   );
 }
 
-type Tab = 'overview' | 'activities' | 'schedule' | 'bom' | 'purchasing' | 'stock' | 'documents' | 'quality' | 'compliance' | 'time' | 'cost';
+type Tab = 'overview' | 'activities' | 'schedule' | 'bom' | 'purchasing' | 'stock' | 'logistics' | 'documents' | 'quality' | 'compliance' | 'time' | 'cost';
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
   const [sp, setSp] = useSearchParams();
   const { t } = useI18n();
-  const { can } = useAuth();
+  const { can, hasRole } = useAuth();
   const nav = useNavigate();
   const { busy, run } = useAction();
+  const [closing, setClosing] = useState(false);
   const isNew = id === 'new';
   const def = RESOURCES.projects;
   const tab = (sp.get('tab') as Tab) || (isNew ? 'overview' : 'activities');
@@ -80,13 +83,15 @@ export function ProjectDetailPage() {
     { key: 'schedule', label: t('pj.schedule'), hidden: isNew },
     { key: 'bom', label: t('r.boms'), hidden: isNew || !can('bom') },
     { key: 'purchasing', label: t('pj.purchasing'), hidden: isNew || !(can('pr') || can('po')) },
-    { key: 'stock', label: t('pj.materials'), hidden: isNew || !can('warehouse') },
+    { key: 'stock', label: t('pj.materials'), hidden: isNew || !(can('warehouse') || can('mr')) },
+    { key: 'logistics', label: t('nav.logistics'), hidden: isNew || !can('logistics') },
     { key: 'documents', label: t('r.documents'), hidden: isNew || !can('documents') },
     { key: 'quality', label: t('pj.quality'), hidden: isNew || !(can('qa') || can('nc')) },
     { key: 'compliance', label: t('r.compliance'), hidden: isNew || !can('compliance') },
     { key: 'time', label: t('nav.timesheets'), hidden: isNew },
-    { key: 'cost', label: t('pj.cost'), hidden: isNew || !can('finance') },
+    { key: 'cost', label: t('pj.cost'), hidden: isNew || !(can('finance') || can('invoices')) },
   ];
+  const locked = ['closed', 'cancelled'].includes(row.status) && !isNew;
 
   return (
     <>
@@ -103,20 +108,34 @@ export function ProjectDetailPage() {
           <div className={`card kpi ${Number(kpi.open_compliance_items) > 0 ? 'warn' : 'ok'}`}><div className="v">{kpi.open_compliance_items}</div><div className="l">{t('f.open_compliance_items')}</div></div>
         </div>
       )}
+      {locked && (
+        <div className="card" style={{ marginBottom: 12, borderColor: 'var(--warn)' }}>
+          <div className="card-body row">
+            <span>🔒 {t(row.status === 'closed' ? 'pj.closedBanner' : 'pj.cancelledBanner')}</span><div className="spacer" />
+            {canWrite && (hasRole('management') || hasRole('admin')) && (
+              <button className="btn" disabled={busy} onClick={() => {
+                if (confirm(t('pj.confirmReopen'))) void run(async () => { await must(supabase.from('projects').update({ status: 'active' }).eq('id', id)); setTick(tick + 1); }, t('m.saved'));
+              }}>↺ {t('pj.reopen')}</button>
+            )}
+          </div>
+        </div>
+      )}
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
 
       {tab === 'overview' && (
         <div className="stack">
           <div className="card">
             <div className="card-head"><h3>{t('pj.info')}</h3><div className="spacer" />
-              {canWrite && <button className="btn primary" disabled={busy || (!dirty && !isNew)} onClick={save}>{t('a.save')}</button>}</div>
+              {canWrite && !isNew && !locked && <button className="btn" disabled={busy} onClick={() => setClosing(true)}>🏁 {t('pj.close')}</button>}
+              {canWrite && !locked && <button className="btn primary" disabled={busy || (!dirty && !isNew)} onClick={save}>{t('a.save')}</button>}</div>
             <div className="card-body">
-              <FormGrid fields={def.fields} row={row} setRow={(r) => { setRow(r); setDirty(true); }} errors={errors} disabled={!canWrite} isNew={isNew} />
+              <FormGrid fields={def.fields} row={row} setRow={(r) => { setRow(r); setDirty(true); }} errors={errors} disabled={!canWrite || locked} isNew={isNew} />
             </div>
           </div>
           {!isNew && <AuditTrail table="projects" id={id} />}
         </div>
       )}
+      {closing && <CloseProjectDialog project={row} onClose={() => setClosing(false)} onClosed={() => { setClosing(false); setTick(tick + 1); }} />}
       {tab === 'activities' && <Idef0Workspace projectId={id} />}
       {tab === 'schedule' && <Schedule projectId={id} />}
       {tab === 'bom' && <ResourceTable def={RESOURCES.boms} projectId={id} compact />}
@@ -127,6 +146,7 @@ export function ProjectDetailPage() {
         </div>
       )}
       {tab === 'stock' && <ProjectMaterials projectId={id} />}
+      {tab === 'logistics' && <ResourceTable def={RESOURCES.shipments} projectId={id} compact />}
       {tab === 'documents' && <DocumentsPanel projectId={id} />}
       {tab === 'quality' && (
         <div className="stack">
@@ -136,7 +156,7 @@ export function ProjectDetailPage() {
       )}
       {tab === 'compliance' && <ComplianceTab projectId={id} market={row.market} />}
       {tab === 'time' && <ProjectHours projectId={id} />}
-      {tab === 'cost' && <ProjectCost projectId={id} />}
+      {tab === 'cost' && <ProjectFinance projectId={id} />}
     </>
   );
 }
@@ -189,6 +209,7 @@ function Schedule({ projectId }: { projectId: string }) {
 
 function ProjectMaterials({ projectId }: { projectId: string }) {
   const { t } = useI18n();
+  const { can } = useAuth();
   const [bva, setBva] = useState<Row[]>([]);
   const [stock, setStock] = useState<Row[]>([]);
   useEffect(() => {
@@ -197,6 +218,7 @@ function ProjectMaterials({ projectId }: { projectId: string }) {
   }, [projectId]);
   return (
     <div className="stack">
+      {can('mr') && <ResourceTable def={RESOURCES.material_requests} projectId={projectId} compact />}
       <div className="card">
         <div className="card-head"><h3>{t('x.bom_vs_actual')}</h3><div className="spacer" /><ExportButton exportKey="bom_vs_actual" filters={{ projectId }} /></div>
         <DataTable rows={bva} columns={[
@@ -271,25 +293,37 @@ function ProjectHours({ projectId }: { projectId: string }) {
   );
 }
 
-function ProjectCost({ projectId }: { projectId: string }) {
-  const { t, lang } = useI18n();
-  const [r, setR] = useState<Row | null>(null);
+/** SRS phase 5: closure checklist, then close (all project records become read-only). */
+function CloseProjectDialog({ project, onClose, onClosed }: { project: Row; onClose: () => void; onClosed: () => void }) {
+  const { t } = useI18n();
+  const { busy, run } = useAction();
+  const [rows, setRows] = useState<{ check_code: string; open_count: number }[] | null>(null);
   useEffect(() => {
-    supabase.from('v_project_cost').select('*').eq('project_id', projectId).maybeSingle().then(({ data }) => setR(data as Row));
-  }, [projectId]);
-  if (!r) return <Empty />;
-  const items: [string, unknown][] = [
-    ['f.contract_value_base', r.contract_value_base], ['f.budget_base', r.budget_base], ['f.labor_cost_base', r.labor_cost_base],
-    ['f.po_committed_base', r.po_committed_base], ['f.po_received_base', r.po_received_base], ['f.total_cost_base', r.total_cost_base],
-    ['f.gross_margin_base', r.gross_margin_base],
-  ];
+    supabase.rpc('project_close_check', { p_project_id: project.id })
+      .then(({ data }) => setRows((data as { check_code: string; open_count: number }[]) ?? []));
+  }, [project.id]);
+  const open = rows ? closeBlockers(rows) : [];
   return (
-    <div className="card">
-      <div className="card-head"><h3>{t('pj.cost')}</h3><span className="small muted">({t('ap.base')})</span><div className="spacer" /><ExportButton exportKey="project_cost" filters={{ projectId }} /></div>
-      <div className="card-body grid cols-4">
-        {items.map(([k, v]) => <div key={k} className="kpi"><div className="v" style={{ fontSize: 18 }}>{fmtMoney(v, lang)}</div><div className="l">{t(k)}</div></div>)}
-        <div className="kpi"><div className="v" style={{ fontSize: 18 }}>{fmtNumber(r.approved_hours, lang)}</div><div className="l">{t('f.approved_hours')}</div></div>
-      </div>
-    </div>
+    <Dialog title={`${t('pj.close')} · ${project.code}`} onClose={onClose} footer={<>
+      <button className="btn" onClick={onClose}>{t('a.cancel')}</button>
+      <button className="btn primary" disabled={busy || !rows || open.length > 0} onClick={() => run(async () => {
+        await must(supabase.from('projects').update({ status: 'closed' }).eq('id', project.id));
+        onClosed();
+      }, t('pj.closedMsg'))}>🏁 {t('pj.close')}</button>
+    </>}>
+      <p className="small muted" style={{ marginTop: 0 }}>{t('pj.closeHelp')}</p>
+      {!rows ? <Spinner /> : (
+        <table className="data"><tbody>
+          {rows.map((r) => (
+            <tr key={r.check_code}>
+              <td>{Number(r.open_count) > 0 ? '✕' : '✓'}</td>
+              <td>{t(`close.${r.check_code}`)}</td>
+              <td className="num"><span className={`badge ${Number(r.open_count) > 0 ? 'red' : 'green'}`}>{r.open_count}</span></td>
+            </tr>
+          ))}
+        </tbody></table>
+      )}
+      {open.length > 0 && <p className="small" style={{ color: 'var(--danger)' }}>{t('pj.closeBlocked')}</p>}
+    </Dialog>
   );
 }
